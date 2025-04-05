@@ -14,8 +14,8 @@ let mainWindow = null;
 function createWindow() {
   // 创建浏览器窗口，设置为830x660，并移除默认标题栏
   mainWindow = new BrowserWindow({
-    width: 830,
-    height: 660,
+    width: 800,
+    height: 600,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: true, // 启用上下文隔离

@@ -29,8 +29,9 @@ const HomePage = () => {
   const showObsSettings = false;
 
   return (
-    <div className="min-h-full bg-gray-900 text-white p-5 flex flex-col h-full gap-5">
-      <div className="flex flex-row gap-5">
+    <div className="min-h-full bg-gray-900 text-white p-2 flex flex-col h-full gap-1">
+      {/* 上部区域：直播设置 */}
+      <div className="flex flex-row gap-3">
         {/* 左侧功能区域 - 自动推流组件 */}
         <div className="w-2/3 h-45 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 border border-slate-700 shadow-lg overflow-auto relative">
           {/* 顶部控制区域 */}
@@ -173,11 +174,45 @@ const HomePage = () => {
           </div>
         </div>
       </div>
+      {/*中间区域：广告位置*/}
+      <div className="w-full my-1 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border border-indigo-900/30 shadow-lg overflow-hidden">
+        {/* 广告容器 - 固定宽高比例 */}
+        <div className="w-full" style={{ height: '100px' }}>
+          {/* 图片广告示例 */}
+          <img 
+            src="/path/to/your/ad-image.jpg" 
+            alt="广告内容"
+            className="w-full h-full object-cover"
+          />
+          
+          {/* 视频广告示例 - 默认隐藏，需要时取消注释 */}
+          {/* <video 
+            className="w-full h-full object-cover"
+            controls={false}
+            autoPlay
+            muted
+            loop
+          >
+            <source src="/path/to/your/ad-video.mp4" type="video/mp4" />
+            您的浏览器不支持视频标签
+          </video> */}
+          
+          {/* 可选：广告标识和关闭按钮 */}
+          <div className="absolute top-2 right-2 flex items-center gap-2">
+            <span className="bg-indigo-600/70 text-white text-xs px-2 py-0.5 rounded">广告</span>
+            <button className="bg-gray-800/60 hover:bg-gray-700/80 p-1 rounded-full text-white text-xs">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
 
-      {/* 下部区域：推荐视频 */}
-      <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 border border-slate-700 shadow-lg overflow-auto">
-        {/* 导航栏 */}
-        <div className="flex justify-between items-center mb-4">
+      {/* 下部区域：主页热门推荐 */}
+      <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4  border border-slate-700 shadow-lg overflow-auto">
+        {/* 导航栏 进一步减小顶部边距，可以使用负边距，*/}
+        <div className="flex justify-between items-center mt-[-10px] mb-2"> 
           <h2 className="text-lg font-semibold text-blue-300">推荐视频</h2>
           <nav className="flex space-x-4">
             <button className="text-sm text-gray-300 hover:text-white">热门</button>
