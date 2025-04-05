@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, Music, UserCheck, Sun, Moon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const TitleBar = () => {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [isElectronAvailable, setIsElectronAvailable] = useState(false);
+  const navigate = useNavigate();
   
   // 检查 electron 对象是否可用
   useEffect(() => {
@@ -59,7 +61,7 @@ const TitleBar = () => {
       <div className="flex no-drag">
         {/* 音乐按钮 */}
         <button 
-          onClick={toggleMute}
+          onClick={() => navigate('/app/audio-settings')}
           className="hover:bg-slate-700 focus:outline-none px-3 h-10 flex items-center justify-center"
           title={isMuted ? "打开音效" : "关闭音效"}
         >
@@ -68,6 +70,7 @@ const TitleBar = () => {
         
         {/* 会员按钮 */}
         <button 
+          onClick={() => navigate('/app/membership')}
           className="hover:bg-slate-700 focus:outline-none px-3 h-10 flex items-center justify-center"
           title="会员中心"
         >

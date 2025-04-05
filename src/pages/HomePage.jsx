@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const HomePage = () => {
+  const navigate = useNavigate();
   // 模拟数据，实际中这些会来自API或state
   const streamSettings = {
     platform: '抖音',
@@ -66,6 +68,7 @@ const HomePage = () => {
           <div className="absolute bottom-4 left-4">
             <button
               className="w-auto py-1 px-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-center text-xs font-medium transition-colors border border-slate-600"
+              onClick={() => navigate('/app/obs-config')}
             >
               OBS一键配置
             </button>
@@ -198,27 +201,47 @@ const HomePage = () => {
           </video> */}
           
           {/* 可选：广告标识和关闭按钮 */}
-          <div className="absolute top-2 right-2 flex items-center gap-2">
+          {/* <div className="absolute top-2 right-2 flex items-center gap-2">
             <span className="bg-indigo-600/70 text-white text-xs px-2 py-0.5 rounded">广告</span>
             <button className="bg-gray-800/60 hover:bg-gray-700/80 p-1 rounded-full text-white text-xs">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-          </div>
+          </div> */}
         </div>
       </div>
 
       {/* 下部区域：主页热门推荐 */}
-      <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4  border border-slate-700 shadow-lg overflow-auto">
+      <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4  border border-slate-700 shadow-lg overflow-hidden">
         {/* 导航栏 进一步减小顶部边距，可以使用负边距，*/}
         <div className="flex justify-between items-center mt-[-10px] mb-2"> 
-          <h2 className="text-lg font-semibold text-blue-300">推荐视频</h2>
-          <nav className="flex space-x-4">
-            <button className="text-sm text-gray-300 hover:text-white">热门</button>
-            <button className="text-sm text-gray-300 hover:text-white">插件</button>
-            <button className="text-sm text-gray-300 hover:text-white">设备推荐</button>
-            <button className="text-sm text-gray-300 hover:text-white">直播教程</button>
+          <h2 className="text-lg font-semibold text-blue-300">热门推荐</h2>
+          <nav className="flex space-x-4">            
+            <button 
+              className="text-sm text-gray-300 hover:text-white"
+              onClick={() => navigate('/app/plugins')}
+            >
+              插件
+            </button>
+            <button 
+              className="text-sm text-gray-300 hover:text-white"
+              onClick={() => navigate('/app/devices')}
+            >
+              设备推荐
+            </button>
+            <button 
+              className="text-sm text-gray-300 hover:text-white"
+              onClick={() => navigate('/app/tutorials')}
+            >
+              直播教程
+            </button>
+            <button 
+              className="text-sm text-gray-300 hover:text-white"
+              onClick={() => navigate('/app/more')}
+            >
+              更多
+            </button>
           </nav>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 gap-3">
