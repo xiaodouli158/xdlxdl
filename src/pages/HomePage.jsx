@@ -168,6 +168,7 @@ const HomePage = () => {
     setIsLoading(true);
     setTimeout(() => {
       setIsStreaming(false);
+      setStreamInfoSuccess(false); // 移除成功图标
       setIsLoading(false);
     }, 1000);
   };
@@ -250,12 +251,10 @@ const HomePage = () => {
                     operationInProgress ? 'bg-blue-600/70 hover:bg-blue-500/90' :
                     'bg-slate-800/70 hover:bg-slate-700/90'}`}
               >
-                {isStreaming ? '停止推流' :
-                 operationInProgress ? '获取中...' :
-                 '自动推流'}
+                {operationInProgress ? '获取中...' : '自动推流'}
 
                 {/* 成功图标 */}
-                {streamInfoSuccess && !isStreaming && !operationInProgress && (
+                {streamInfoSuccess && !operationInProgress && (
                   <span className="absolute -top-2 -right-2 bg-green-500 rounded-full p-1">
                     <Check size={16} />
                   </span>
@@ -269,6 +268,8 @@ const HomePage = () => {
                   </span>
                 )}
               </button>
+
+
             ) : (
               <div className="pointer-events-auto w-4/5 bg-slate-800/70 p-4 rounded-lg border border-slate-600">
                 <div className="mb-3">
