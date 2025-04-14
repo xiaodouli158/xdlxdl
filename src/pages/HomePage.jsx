@@ -1,34 +1,217 @@
-import React, { useState } from 'react';
-import { User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Check, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+// import { useStreaming } from '../context/StreamingContext';
+// import { workspaceStreamInfo, configureAndStartOBS } from '../utils/obsUtils';
 
 const HomePage = () => {
   const navigate = useNavigate();
-  // 模拟数据，实际中这些会来自API或state
-  const streamSettings = {
-    platform: '抖音',
-    streamMethod: '直播伴侣',
-    autoFlow: true
+
+  // 模拟数据，实际中这些会来自上下文
+  const [obsVersion, setObsVersion] = useState('30.2.2');
+  const [companionVersion, setCompanionVersion] = useState('9.6.3');
+
+  const [autoMode, setAutoMode] = useState(true);
+  const [platform, setPlatform] = useState('抖音');
+  const [streamMethod, setStreamMethod] = useState('直播伴侣');
+  const [streamUrl, setStreamUrl] = useState('');
+  const [streamKey, setStreamKey] = useState('');
+
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [streamInfoSuccess, setStreamInfoSuccess] = useState(false);
+  const [error, setError] = useState(null);
+
+  // 用于跟踪操作是否可以被中止
+  const [abortController, setAbortController] = useState(null);
+  const [operationInProgress, setOperationInProgress] = useState(false);
+
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userInfo, setUserInfo] = useState(null);
+
+  // 模拟操作
+  const toggleMode = () => setAutoMode(!autoMode);
+  const handlePlatformChange = (newPlatform) => setPlatform(newPlatform);
+  const handleMethodChange = (newMethod) => setStreamMethod(newMethod);
+
+  // 获取推流码按钮点击处理
+  const getStreamInfo = async () => {
+    // 如果操作正在进行中，则中止当前操作
+    if (operationInProgress && abortController) {
+      abortController.abort();
+      setOperationInProgress(false);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    // 创建新的 AbortController
+    const controller = new AbortController();
+    setAbortController(controller);
+    setOperationInProgress(true);
+    setIsLoading(true);
+    setError(null);
+    setStreamInfoSuccess(false);
+
+    try {
+      // 模拟异步操作
+      const timeoutPromise = new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          // 检查是否已经被中止
+          if (controller.signal.aborted) {
+            reject(new Error('操作已被用户取消'));
+            return;
+          }
+
+          resolve({
+            streamUrl: 'rtmp://push.douyin.com/live',
+            streamKey: 'mock_key_' + Date.now()
+          });
+        }, 2000); // 模拟 2 秒的延迟
+
+        // 如果被中止，清除定时器
+        controller.signal.addEventListener('abort', () => {
+          clearTimeout(timeoutId);
+          reject(new Error('操作已被用户取消'));
+        });
+      });
+
+      // 等待异步操作完成
+      const result = await timeoutPromise;
+
+      // 设置推流信息
+      setStreamUrl(result.streamUrl);
+      setStreamKey(result.streamKey);
+      setStreamInfoSuccess(true);
+    } catch (err) {
+      if (err.message !== '操作已被用户取消') {
+        setError(`获取推流信息失败: ${err.message}`);
+      }
+    } finally {
+      setOperationInProgress(false);
+      setIsLoading(false);
+      setAbortController(null);
+    }
   };
-  
-  const obsSettings = {
+
+  // 自动推流按钮点击处理
+  const startAutoStreaming = async () => {
+    // 如果已经在推流中，则停止推流
+    if (isStreaming) {
+      await stopStreaming();
+      return;
+    }
+
+    // 如果操作正在进行中，则中止当前操作
+    if (operationInProgress && abortController) {
+      abortController.abort();
+      setOperationInProgress(false);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    // 创建新的 AbortController
+    const controller = new AbortController();
+    setAbortController(controller);
+    setOperationInProgress(true);
+    setIsLoading(true);
+    setError(null);
+    setStreamInfoSuccess(false);
+
+    try {
+      // 模拟异步操作 - 获取推流信息
+      const timeoutPromise = new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          // 检查是否已经被中止
+          if (controller.signal.aborted) {
+            reject(new Error('操作已被用户取消'));
+            return;
+          }
+
+          resolve({
+            streamUrl: 'rtmp://push.douyin.com/live',
+            streamKey: 'mock_key_' + Date.now()
+          });
+        }, 2000); // 模拟 2 秒的延迟
+
+        // 如果被中止，清除定时器
+        controller.signal.addEventListener('abort', () => {
+          clearTimeout(timeoutId);
+          reject(new Error('操作已被用户取消'));
+        });
+      });
+
+      // 等待异步操作完成
+      const result = await timeoutPromise;
+
+      // 设置推流信息
+      setStreamUrl(result.streamUrl);
+      setStreamKey(result.streamKey);
+      setStreamInfoSuccess(true);
+
+      // 模拟配置 OBS 并启动推流
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsStreaming(true);
+    } catch (err) {
+      if (err.message !== '操作已被用户取消') {
+        setError(`自动推流失败: ${err.message}`);
+      }
+    } finally {
+      setOperationInProgress(false);
+      setIsLoading(false);
+      setAbortController(null);
+    }
+  };
+
+  const stopStreaming = async () => {
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsStreaming(false);
+      setIsLoading(false);
+    }, 1000);
+  };
+
+  const login = async () => {
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoggedIn(true);
+      setUserInfo({
+        nickname: '抖音用户',
+        avatar: null,
+        likeCount: 1000,
+        fansCount: 500
+      });
+      setIsLoading(false);
+    }, 1000);
+  };
+
+  const logout = () => {
+    setIsLoggedIn(false);
+    setUserInfo(null);
+  };
+
+  // 本地状态
+  const [showObsSettings, setShowObsSettings] = useState(false);
+  const [obsConfigs, setObsConfigs] = useState(['配置1.json', '配置2.json', '配置3.json']);
+  const [selectedConfig, setSelectedConfig] = useState('OBS备份');
+  const [obsSettings, setObsSettings] = useState({
     deviceType: 'phone',
-    deviceSize: '11寸',
-    selectedConfig: 'OBS备份'
-  };
-  
-  const isLoggedIn = false;
-  const userAvatar = null;
-  const username = null;
-  const userStats = {
-    followCount: null,
-    fansCount: null,
-    likeCount: null
-  };
-  
+    deviceSize: '11寸'
+  });
+
+  // 示例视频文件
   const videoFiles = ['视频1.mp4', '视频2.mp4', '视频3.mp4', '视频4.mp4', '视频5.mp4', '视频6.mp4', '视频7.mp4'];
-  const obsConfigs = ['配置1.json', '配置2.json', '配置3.json'];
-  const showObsSettings = false;
+
+
+  // 处理登录/退出按钮点击
+  const handleLoginClick = async () => {
+    if (isLoggedIn) {
+      logout();
+    } else {
+      await login();
+    }
+  };
 
   return (
     <div className="min-h-full bg-gray-900 text-white p-2 flex flex-col h-full gap-1">
@@ -41,27 +224,101 @@ const HomePage = () => {
 
             <div className="flex flex-row items-center">
               <span className="text-slate-300 text-xs">OBS：</span>
-              <span className="text-yellow-300 text-sm font-medium">30.2.2</span>
+              <span className="text-yellow-300 text-sm font-medium">{obsVersion || '未检测到'}</span>
             </div>
 
             <div className="flex flex-row items-center">
               <span className="text-slate-300 text-xs">伴侣：</span>
-              <span className="text-yellow-300 text-sm font-medium">9.6.3</span>
+              <span className="text-yellow-300 text-sm font-medium">{companionVersion || '未检测到'}</span>
             </div>
 
             <div className="flex flex-row items-center">
-              <div className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" value="" className="sr-only peer" checked={streamSettings.autoFlow} readOnly />
+              <div className="relative inline-flex items-center cursor-pointer" onClick={toggleMode}>
+                <input type="checkbox" value="" className="sr-only peer" checked={autoMode} readOnly />
                 <div className="w-10 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
               </div>
             </div>
           </div>
 
-          {/* 中央显示区域 - 自动推流按钮 */}
+          {/* 中央显示区域 - 自动推流按钮或推流码显示 */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <button className="pointer-events-auto bg-slate-800/70 hover:bg-slate-700/90 px-8 py-3 rounded-lg border border-slate-600 text-3xl font-bold text-slate-200 transition-colors">
-              自动推流
-            </button>
+            {autoMode ? (
+              <button
+                onClick={startAutoStreaming}
+                className={`pointer-events-auto px-8 py-3 rounded-lg border border-slate-600 text-3xl font-bold text-slate-200 transition-colors relative
+                  ${isStreaming ? 'bg-red-700/70 hover:bg-red-600/90' :
+                    operationInProgress ? 'bg-blue-600/70 hover:bg-blue-500/90' :
+                    'bg-slate-800/70 hover:bg-slate-700/90'}`}
+              >
+                {isStreaming ? '停止推流' :
+                 operationInProgress ? '获取中...' :
+                 '自动推流'}
+
+                {/* 成功图标 */}
+                {streamInfoSuccess && !isStreaming && !operationInProgress && (
+                  <span className="absolute -top-2 -right-2 bg-green-500 rounded-full p-1">
+                    <Check size={16} />
+                  </span>
+                )}
+
+                {/* 加载动画 */}
+                {operationInProgress && (
+                  <span className="absolute top-1 right-1 flex">
+                    <span className="animate-ping absolute h-2 w-2 rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative rounded-full h-2 w-2 bg-blue-500"></span>
+                  </span>
+                )}
+              </button>
+            ) : (
+              <div className="pointer-events-auto w-4/5 bg-slate-800/70 p-4 rounded-lg border border-slate-600">
+                <div className="mb-3">
+                  <label className="block text-gray-300 text-sm mb-1">推流地址</label>
+                  <input
+                    type="text"
+                    value={streamUrl}
+                    readOnly
+                    className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-gray-300 text-sm mb-1">推流密钥</label>
+                  <input
+                    type="text"
+                    value={streamKey ? '********' : ''}
+                    readOnly
+                    className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
+                  />
+                </div>
+                <button
+                  onClick={getStreamInfo}
+                  className={`w-full py-2 rounded-lg text-lg font-medium transition-colors relative
+                    ${operationInProgress ? 'bg-blue-500 hover:bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                >
+                  {operationInProgress ? '获取中...' : '获取推流码'}
+
+                  {/* 成功图标 */}
+                  {streamInfoSuccess && !operationInProgress && (
+                    <span className="absolute -top-2 -right-2 bg-green-500 rounded-full p-1">
+                      <Check size={16} />
+                    </span>
+                  )}
+
+                  {/* 加载动画 */}
+                  {operationInProgress && (
+                    <span className="absolute top-2 right-2 flex">
+                      <span className="animate-ping absolute h-2 w-2 rounded-full bg-white opacity-75"></span>
+                      <span className="relative rounded-full h-2 w-2 bg-white"></span>
+                    </span>
+                  )}
+                </button>
+                {error && (
+                  <div className="mt-2 text-red-400 text-sm flex items-center">
+                    <AlertCircle size={14} className="mr-1" />
+                    {error}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 底部控制区域 - 绝对定位在左下角和右下角 */}
@@ -73,11 +330,12 @@ const HomePage = () => {
               OBS一键配置
             </button>
           </div>
-          
+
           <div className="absolute bottom-4 right-4">
             <select
               className="w-auto bg-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none text-left pl-3 pr-8 border border-slate-600 relative"
-              value={obsSettings.selectedConfig}
+              value={selectedConfig}
+              onChange={(e) => setSelectedConfig(e.target.value)}
               style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}
             >
               <option value="OBS备份">OBS备份</option>
@@ -100,46 +358,51 @@ const HomePage = () => {
                 <div>
                   <div className="flex flex-row justify-between items-center mb-2">
                     <label className="text-gray-300 text-sm font-medium">选择平台</label>
-                    <button
-                      className={`py-1 px-3 rounded-lg flex items-center justify-center text-sm font-medium transition-colors ${isLoggedIn ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
-                    >
-                      <span>{isLoggedIn ? '退出登录' : '登录平台'}</span>
-                    </button>
+                    {(platform === '抖音' && (streamMethod === '手机开播' || streamMethod === '自动开播')) && (
+                      <button
+                        onClick={handleLoginClick}
+                        className={`py-1 px-3 rounded-lg flex items-center justify-center text-sm font-medium transition-colors ${isLoggedIn ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                      >
+                        <span>{isLoggedIn ? '退出登录' : '登录平台'}</span>
+                      </button>
+                    )}
                   </div>
                   <select
-                    value={streamSettings.platform}
+                    value={platform}
+                    onChange={(e) => handlePlatformChange(e.target.value)}
                     className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
                   >
                     <option value="抖音">抖音</option>
-                    <option value="快手">快手</option>
-                    <option value="拼多多">拼多多</option>
-                    <option value="小红书">小红书</option>
+                    <option value="Bilibili">Bilibili</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-gray-300 mb-2 text-sm font-medium">直播方式</label>
-                  <select
-                    value={streamSettings.streamMethod}
-                    className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
-                  >
-                    <option value="直播伴侣">直播伴侣</option>
-                    <option value="手机开播">手机开播</option>
-                    <option value="自动开播">自动开播</option>
-                  </select>
-                </div>
+                {platform === '抖音' && (
+                  <div>
+                    <label className="block text-gray-300 mb-2 text-sm font-medium">直播方式</label>
+                    <select
+                      value={streamMethod}
+                      onChange={(e) => handleMethodChange(e.target.value)}
+                      className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
+                    >
+                      <option value="直播伴侣">直播伴侣</option>
+                      <option value="手机开播">手机开播</option>
+                      <option value="自动开播">自动开播</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* 右侧：平台信息和用户信息 */}
             <div className="w-1/2 bg-slate-700/30 rounded-lg p-2 pt-1 border border-slate-600/40 backdrop-blur-sm">
               <div className="flex items-center justify-center mt-0">
-                {isLoggedIn ? (
+                {isLoggedIn && userInfo ? (
                   <div className="flex flex-col items-center">
                     <div className="w-15 h-16 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center overflow-hidden border-2 border-white/20 mb-3">
-                      {userAvatar ? (
+                      {userInfo.avatar ? (
                         <img
-                          src={userAvatar}
+                          src={userInfo.avatar}
                           alt="用户头像"
                           className="w-full h-full object-cover"
                         />
@@ -149,16 +412,16 @@ const HomePage = () => {
                     </div>
 
                     <div className="flex flex-col items-center">
-                      <p className="text-white font-medium text-sm mb-2">{username || '未知用户'}</p>
+                      <p className="text-white font-medium text-sm mb-2">{userInfo.nickname || '未知用户'}</p>
                       <div className="flex gap-2">
-                        {userStats.likeCount && (
+                        {userInfo.likeCount && (
                           <div className="bg-slate-600/60 rounded-lg px-3 py-1 text-center border border-slate-500/30">
-                            <p className="text-xs text-blue-200">{userStats.likeCount}</p>
+                            <p className="text-xs text-blue-200">点赞: {userInfo.likeCount}</p>
                           </div>
                         )}
-                        {userStats.fansCount && (
+                        {userInfo.fansCount && (
                           <div className="bg-slate-600/60 rounded-lg px-3 py-1 text-center border border-slate-500/30">
-                            <p className="text-xs text-blue-200">{userStats.fansCount}</p>
+                            <p className="text-xs text-blue-200">粉丝: {userInfo.fansCount}</p>
                           </div>
                         )}
                       </div>
@@ -182,14 +445,14 @@ const HomePage = () => {
         {/* 广告容器 - 固定宽高比例 */}
         <div className="w-full" style={{ height: '100px' }}>
           {/* 图片广告示例 */}
-          <img 
-            src="/path/to/your/ad-image.jpg" 
+          <img
+            src="/path/to/your/ad-image.jpg"
             alt="广告内容"
             className="w-full h-full object-cover"
           />
-          
+
           {/* 视频广告示例 - 默认隐藏，需要时取消注释 */}
-          {/* <video 
+          {/* <video
             className="w-full h-full object-cover"
             controls={false}
             autoPlay
@@ -199,7 +462,7 @@ const HomePage = () => {
             <source src="/path/to/your/ad-video.mp4" type="video/mp4" />
             您的浏览器不支持视频标签
           </video> */}
-          
+
           {/* 可选：广告标识和关闭按钮 */}
           {/* <div className="absolute top-2 right-2 flex items-center gap-2">
             <span className="bg-indigo-600/70 text-white text-xs px-2 py-0.5 rounded">广告</span>
@@ -215,28 +478,28 @@ const HomePage = () => {
       {/* 下部区域：主页热门推荐 */}
       <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4  border border-slate-700 shadow-lg overflow-hidden">
         {/* 导航栏 进一步减小顶部边距，可以使用负边距，*/}
-        <div className="flex justify-between items-center mt-[-10px] mb-2"> 
+        <div className="flex justify-between items-center mt-[-10px] mb-2">
           <h2 className="text-lg font-semibold text-blue-300">热门推荐</h2>
-          <nav className="flex space-x-4">            
-            <button 
+          <nav className="flex space-x-4">
+            <button
               className="text-sm text-gray-300 hover:text-white"
               onClick={() => navigate('/app/plugins')}
             >
               插件
             </button>
-            <button 
+            <button
               className="text-sm text-gray-300 hover:text-white"
               onClick={() => navigate('/app/devices')}
             >
               设备推荐
             </button>
-            <button 
+            <button
               className="text-sm text-gray-300 hover:text-white"
               onClick={() => navigate('/app/tutorials')}
             >
               直播教程
             </button>
-            <button 
+            <button
               className="text-sm text-gray-300 hover:text-white"
               onClick={() => navigate('/app/more')}
             >
