@@ -39,34 +39,62 @@ const HomePage = () => {
     // 定义异步函数
     const fetchVersions = async () => {
       try {
-        // 首先显示“检测中”状态
-        setObsVersion('检测中');
-        setCompanionVersion('检测中');
-
-        // 检查 Electron 环境
-        if (typeof window !== 'undefined' && window.electron) {
-          // 获取OBS版本
-          const obsVer = await window.electron.getOBSVersion();
-          setObsVersion(obsVer || '未识别');
-
-          // 获取伴侣版本
-          const compVer = await window.electron.getCompanionVersion();
-          setCompanionVersion(compVer || '未识别');
+        // 检查本地存储中是否已有版本信息
+        const storedObsVersion = localStorage.getItem('obsVersion');
+        const storedCompanionVersion = localStorage.getItem('companionVersion');
+        
+        // 如果已经有存储的版本信息且不是"检测中"或"未识别"，则使用存储的版本
+        if (storedObsVersion && storedObsVersion !== '检测中' && storedObsVersion !== '未识别') {
+          setObsVersion(storedObsVersion);
         } else {
-          // 如果不在 Electron 环境中，显示未识别
+          // 首先显示"检测中"状态
           setObsVersion('检测中');
+          
+          // 检查 Electron 环境
+          if (typeof window !== 'undefined' && window.electron) {
+            // 获取OBS版本
+            const obsVer = await window.electron.getOBSVersion();
+            setObsVersion(obsVer || '未识别');
+            // 存储到本地存储
+            localStorage.setItem('obsVersion', obsVer || '未识别');
+          } else {
+            // 如果不在 Electron 环境中，显示未识别
+            setObsVersion('未识别');
+            localStorage.setItem('obsVersion', '未识别');
+          }
+        }
+
+        if (storedCompanionVersion && storedCompanionVersion !== '检测中' && storedCompanionVersion !== '未识别') {
+          setCompanionVersion(storedCompanionVersion);
+        } else {
+          // 首先显示"检测中"状态
           setCompanionVersion('检测中');
+          
+          // 检查 Electron 环境
+          if (typeof window !== 'undefined' && window.electron) {
+            // 获取伴侣版本
+            const compVer = await window.electron.getCompanionVersion();
+            setCompanionVersion(compVer || '未识别');
+            // 存储到本地存储
+            localStorage.setItem('companionVersion', compVer || '未识别');
+          } else {
+            // 如果不在 Electron 环境中，显示未识别
+            setCompanionVersion('未识别');
+            localStorage.setItem('companionVersion', '未识别');
+          }
         }
       } catch (error) {
         // 发生错误时显示未识别
         setObsVersion('未识别');
         setCompanionVersion('未识别');
+        localStorage.setItem('obsVersion', '未识别');
+        localStorage.setItem('companionVersion', '未识别');
       }
     };
 
     // 执行异步函数
     fetchVersions();
-  }, []);
+  }, []); // 空依赖数组确保只在组件挂载时执行一次
 
   // 模拟操作
   const toggleMode = () => setAutoMode(!autoMode);
