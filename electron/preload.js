@@ -1,5 +1,5 @@
-// ES模块格式的preload脚本
-import { contextBridge, ipcRenderer } from 'electron';
+// 使用 CommonJS 语法的 preload 脚本
+const { contextBridge, ipcRenderer } = require('electron');
 
 // 暴露API到渲染进程
 contextBridge.exposeInMainWorld('electron', {

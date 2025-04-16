@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { User, Check, AlertCircle } from 'lucide-react';
+import { User, Check, AlertCircle, Link, Key, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 // import { useStreaming } from '../context/StreamingContext';
 // import { workspaceStreamInfo, configureAndStartOBS } from '../utils/obsUtils';
+
+// 使用真实的 Electron API 获取软件版本
+
 
 const HomePage = () => {
   const navigate = useNavigate();
 
   // 模拟数据，实际中这些会来自上下文
-  const [obsVersion, setObsVersion] = useState('30.2.2');
-  const [companionVersion, setCompanionVersion] = useState('9.6.3');
 
   const [autoMode, setAutoMode] = useState(true);
   const [platform, setPlatform] = useState('抖音');
   const [streamMethod, setStreamMethod] = useState('直播伴侣');
   const [streamUrl, setStreamUrl] = useState('');
   const [streamKey, setStreamKey] = useState('');
+
+  // Add missing state variables for OBS and companion versions
+  const [obsVersion, setObsVersion] = useState('检测中');
+  const [companionVersion, setCompanionVersion] = useState('检测中');
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,6 +33,40 @@ const HomePage = () => {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
+
+  // 页面加载时自动检测OBS和伴侣版本
+  useEffect(() => {
+    // 定义异步函数
+    const fetchVersions = async () => {
+      try {
+        // 首先显示“检测中”状态
+        setObsVersion('检测中');
+        setCompanionVersion('检测中');
+
+        // 检查 Electron 环境
+        if (typeof window !== 'undefined' && window.electron) {
+          // 获取OBS版本
+          const obsVer = await window.electron.getOBSVersion();
+          setObsVersion(obsVer || '未识别');
+
+          // 获取伴侣版本
+          const compVer = await window.electron.getCompanionVersion();
+          setCompanionVersion(compVer || '未识别');
+        } else {
+          // 如果不在 Electron 环境中，显示未识别
+          setObsVersion('检测中');
+          setCompanionVersion('检测中');
+        }
+      } catch (error) {
+        // 发生错误时显示未识别
+        setObsVersion('未识别');
+        setCompanionVersion('未识别');
+      }
+    };
+
+    // 执行异步函数
+    fetchVersions();
+  }, []);
 
   // 模拟操作
   const toggleMode = () => setAutoMode(!autoMode);
@@ -192,6 +231,18 @@ const HomePage = () => {
     setUserInfo(null);
   };
 
+  // 复制文本到剪贴板
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        // 可以添加一个提示，表示复制成功
+        console.log('复制成功');
+      })
+      .catch(err => {
+        console.error('复制失败:', err);
+      });
+  };
+
   // 本地状态
   const [showObsSettings, setShowObsSettings] = useState(false);
   const [obsConfigs, setObsConfigs] = useState(['配置1.json', '配置2.json', '配置3.json']);
@@ -225,12 +276,16 @@ const HomePage = () => {
 
             <div className="flex flex-row items-center">
               <span className="text-slate-300 text-xs">OBS：</span>
-              <span className="text-yellow-300 text-sm font-medium">{obsVersion || '未检测到'}</span>
+              <span className={`text-sm font-medium ${obsVersion === '检测中' ? 'text-blue-300 animate-pulse' : obsVersion === '未识别' ? 'text-red-300' : 'text-yellow-300'}`}>
+                {obsVersion}
+              </span>
             </div>
 
             <div className="flex flex-row items-center">
               <span className="text-slate-300 text-xs">伴侣：</span>
-              <span className="text-yellow-300 text-sm font-medium">{companionVersion || '未检测到'}</span>
+              <span className={`text-sm font-medium ${companionVersion === '检测中' ? 'text-blue-300 animate-pulse' : companionVersion === '未识别' ? 'text-red-300' : 'text-yellow-300'}`}>
+                {companionVersion}
+              </span>
             </div>
 
             <div className="flex flex-row items-center">
@@ -242,14 +297,14 @@ const HomePage = () => {
           </div>
 
           {/* 中央显示区域 - 自动推流按钮或推流码显示 */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ top: '40px' }}>
             {autoMode ? (
               <button
                 onClick={startAutoStreaming}
-                className={`pointer-events-auto px-8 py-3 rounded-lg border border-slate-600 text-3xl font-bold text-slate-200 transition-colors relative
+                className={`pointer-events-auto w-[340px] py-1.5 rounded-md border border-slate-600/50 text-lg font-bold text-slate-200 transition-colors relative mb-10
                   ${isStreaming ? 'bg-red-700/70 hover:bg-red-600/90' :
                     operationInProgress ? 'bg-blue-600/70 hover:bg-blue-500/90' :
-                    'bg-slate-800/70 hover:bg-slate-700/90'}`}
+                      'bg-slate-800/90 hover:bg-slate-700/90'}`}
               >
                 {operationInProgress ? '获取中...' : '自动推流'}
 
@@ -271,29 +326,54 @@ const HomePage = () => {
 
 
             ) : (
-              <div className="pointer-events-auto w-4/5 bg-slate-800/70 p-4 rounded-lg border border-slate-600">
-                <div className="mb-3">
-                  <label className="block text-gray-300 text-sm mb-1">推流地址</label>
+              <div className="pointer-events-auto w-[340px] flex flex-col gap-1.5 max-h-[140px] mb-10">
+                {/* 推流地址输入框 */}
+                <div className="relative">
+                  <div className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    <Link size={14} />
+                  </div>
                   <input
                     type="text"
                     value={streamUrl}
                     readOnly
-                    className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
+                    placeholder="推流地址"
+                    className="w-full bg-slate-800/90 text-white pl-9 pr-9 py-1.5 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600/50 text-sm"
                   />
+                  <button
+                    onClick={() => copyToClipboard(streamUrl)}
+                    className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                    title="复制推流地址"
+                  >
+                    <Copy size={14} />
+                  </button>
                 </div>
-                <div className="mb-3">
-                  <label className="block text-gray-300 text-sm mb-1">推流密钥</label>
+
+                {/* 推流密钥输入框 */}
+                <div className="relative">
+                  <div className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    <Key size={14} />
+                  </div>
                   <input
                     type="text"
                     value={streamKey ? '********' : ''}
                     readOnly
-                    className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
+                    placeholder="推流密钥"
+                    className="w-full bg-slate-800/90 text-white pl-9 pr-9 py-1.5 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600/50 text-sm"
                   />
+                  <button
+                    onClick={() => copyToClipboard(streamKey)}
+                    className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                    title="复制推流密钥"
+                  >
+                    <Copy size={14} />
+                  </button>
                 </div>
+
+                {/* 获取推流码按钮 */}
                 <button
                   onClick={getStreamInfo}
-                  className={`w-full py-2 rounded-lg text-lg font-medium transition-colors relative
-                    ${operationInProgress ? 'bg-blue-500 hover:bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                  className={`w-full py-1.5 rounded-md text-sm font-medium transition-colors relative
+                    ${operationInProgress ? 'bg-blue-500 hover:bg-blue-400' : 'bg-blue-600 hover:bg-blue-500'} text-white`}
                 >
                   {operationInProgress ? '获取中...' : '获取推流码'}
 
@@ -306,7 +386,7 @@ const HomePage = () => {
 
                   {/* 加载动画 */}
                   {operationInProgress && (
-                    <span className="absolute top-2 right-2 flex">
+                    <span className="absolute top-1/2 right-4 transform -translate-y-1/2 flex">
                       <span className="animate-ping absolute h-2 w-2 rounded-full bg-white opacity-75"></span>
                       <span className="relative rounded-full h-2 w-2 bg-white"></span>
                     </span>
@@ -323,7 +403,7 @@ const HomePage = () => {
           </div>
 
           {/* 底部控制区域 - 绝对定位在左下角和右下角 */}
-          <div className="absolute bottom-4 left-4">
+          <div className="absolute bottom-3 left-3 z-10">
             <button
               className="w-auto py-1 px-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-center text-xs font-medium transition-colors border border-slate-600"
               onClick={() => navigate('/app/obs-config')}
@@ -332,7 +412,7 @@ const HomePage = () => {
             </button>
           </div>
 
-          <div className="absolute bottom-4 right-4">
+          <div className="absolute bottom-3 right-3 z-10">
             <select
               className="w-auto bg-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none text-left pl-3 pr-8 border border-slate-600 relative"
               value={selectedConfig}

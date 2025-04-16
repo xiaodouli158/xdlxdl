@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import fs from 'fs';
 import { promisify } from 'util';
+import { getSoftwareVersion, getSoftwarePath } from '../src/utils/Findsoftpaths.js';
 
 // 将回调函数转换为 Promise
 const execAsync = promisify(exec);
@@ -24,30 +25,52 @@ let obsWebSocket = null;
 
 // 创建浏览器窗口函数
 function createWindow() {
-  // 创建浏览器窗口，设置为830x660，并移除默认标题栏
-  mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: true, // 启用上下文隔离
-      preload: path.join(__dirname, 'preload.js'), // 预加载脚本
-    },
-    resizable: false,
-    frame: false, // 移除默认窗口边框
-    titleBarStyle: 'hidden', // 隐藏标题栏
-  });
+  try {
+    console.log('Creating main window...');
+    // 创建浏览器窗口，设置为830x660，并移除默认标题栏
+    mainWindow = new BrowserWindow({
+      width: 800,
+      height: 600,
+      webPreferences: {
+        nodeIntegration: false, // 关闭 Node 集成
+        contextIsolation: true, // 启用上下文隔离
+        preload: path.join(__dirname, 'preload.js'), // 预加载脚本
+      },
+      resizable: false,
+      frame: false, // 移除默认窗口边框
+      titleBarStyle: 'hidden', // 隐藏标题栏
+    });
 
-  // 开发环境下使用Vite开发服务器
-  if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:5173');
-    // 打开开发者工具
-    mainWindow.webContents.openDevTools();
-  } else {
-    // 生产环境加载打包后的文件
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // 开发环境下使用Vite开发服务器
+    if (!app.isPackaged) {
+      console.log('Loading development URL: http://localhost:5173');
+      mainWindow.loadURL('http://localhost:5173');
+      // 打开开发者工具
+      mainWindow.webContents.openDevTools();
+    } else {
+      // 生产环境加载打包后的文件
+      const htmlPath = path.join(__dirname, '../dist/index.html');
+      console.log('Loading production file:', htmlPath);
+      mainWindow.loadFile(htmlPath);
+    }
+
+    // 添加window加载错误事件监听
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('Window failed to load:', errorCode, errorDescription);
+    });
+    
+    // 添加窗口关闭事件监听
+    mainWindow.on('closed', () => {
+      mainWindow = null;
+      console.log('Main window closed');
+    });
+    
+    console.log('Window created successfully');
+  } catch (error) {
+    console.error('Error creating window:', error);
   }
 }
+
 
 // 应用准备就绪后创建窗口
 app.whenReady().then(() => {
@@ -72,27 +95,23 @@ app.whenReady().then(() => {
     if (mainWindow) mainWindow.close();
   });
 
-  // OBS 相关功能
+  // OBS版本号
   ipcMain.handle('get-obs-version', async () => {
     try {
-      // 在 Windows 上检测 OBS 版本
-      const { stdout } = await execAsync('powershell -Command "Get-ItemProperty -Path \'HKLM:\\SOFTWARE\\OBS Studio\' -Name Version | Select-Object -ExpandProperty Version"', { timeout: 5000 });
-      return stdout.trim();
-    } catch (error) {
-      console.error('Failed to get OBS version:', error);
-      return null;
+      const version = await getSoftwareVersion('OBS Studio');
+      return version || '未检测到';
+    } catch (e) {
+      return '未检测到';
     }
   });
 
+  // 伴侣版本号
   ipcMain.handle('get-companion-version', async () => {
     try {
-      // 在 Windows 上检测直播伴侣版本
-      // 注意：这里使用的是示例路径，实际应用中需要更新为正确的路径
-      const { stdout } = await execAsync('powershell -Command "Get-ItemProperty -Path \'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*\' | Where-Object { $_.DisplayName -like \'*直播伴侣*\' } | Select-Object -ExpandProperty DisplayVersion"', { timeout: 5000 });
-      return stdout.trim();
-    } catch (error) {
-      console.error('Failed to get companion version:', error);
-      return null;
+      const version = await getSoftwareVersion('直播伴侣');
+      return version || '未检测到';
+    } catch (e) {
+      return '未检测到';
     }
   });
 

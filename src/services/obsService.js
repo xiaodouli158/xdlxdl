@@ -11,48 +11,6 @@ class OBSService {
   }
 
   /**
-   * Detect installed OBS version
-   * @returns {Promise<string|null>} OBS version or null if not found
-   */
-  async detectOBSVersion() {
-    try {
-      // In a real implementation, this would use Electron's child_process or similar
-      // to detect the installed OBS version
-      if (window.electron) {
-        // This would be implemented in the preload script
-        return await window.electron.getOBSVersion();
-      }
-
-      // Fallback mock version for development
-      return '30.2.2';
-    } catch (error) {
-      console.error('Failed to detect OBS version:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Detect installed streaming companion version
-   * @returns {Promise<string|null>} Companion version or null if not found
-   */
-  async detectCompanionVersion() {
-    try {
-      // In a real implementation, this would use Electron's child_process or similar
-      // to detect the installed companion version
-      if (window.electron) {
-        // This would be implemented in the preload script
-        return await window.electron.getCompanionVersion();
-      }
-
-      // Fallback mock version for development
-      return '9.6.3';
-    } catch (error) {
-      console.error('Failed to detect companion version:', error);
-      return null;
-    }
-  }
-
-  /**
    * Connect to OBS via WebSocket
    * @param {string} address - WebSocket address (default: localhost:4455)
    * @param {string} password - WebSocket password (if required)
