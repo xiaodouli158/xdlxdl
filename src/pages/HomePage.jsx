@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { User, Check, AlertCircle, Link, Key, Copy } from 'lucide-react';
+import LoginModal from '../components/LoginModal';
 import { useNavigate } from 'react-router-dom';
+import { loginWithDouyinWeb, loginWithDouyinCompanion, loadDouyinUserData, clearDouyinUserData } from '../utils/douyinLoginUtils';
 // import { useStreaming } from '../context/StreamingContext';
 // import { workspaceStreamInfo, configureAndStartOBS } from '../utils/obsUtils';
 
@@ -33,6 +35,7 @@ const HomePage = () => {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // 页面加载时自动检测OBS和伴侣版本
   useEffect(() => {
@@ -42,14 +45,14 @@ const HomePage = () => {
         // 检查本地存储中是否已有版本信息
         const storedObsVersion = localStorage.getItem('obsVersion');
         const storedCompanionVersion = localStorage.getItem('companionVersion');
-        
+
         // 如果已经有存储的版本信息且不是"检测中"或"未识别"，则使用存储的版本
         if (storedObsVersion && storedObsVersion !== '检测中' && storedObsVersion !== '未识别') {
           setObsVersion(storedObsVersion);
         } else {
           // 首先显示"检测中"状态
           setObsVersion('检测中');
-          
+
           // 检查 Electron 环境
           if (typeof window !== 'undefined' && window.electron) {
             // 获取OBS版本
@@ -69,7 +72,7 @@ const HomePage = () => {
         } else {
           // 首先显示"检测中"状态
           setCompanionVersion('检测中');
-          
+
           // 检查 Electron 环境
           if (typeof window !== 'undefined' && window.electron) {
             // 获取伴侣版本
@@ -240,21 +243,79 @@ const HomePage = () => {
     }, 1000);
   };
 
-  const login = async () => {
-    setIsLoading(true);
-    setTimeout(() => {
+  // 检查是否已登录
+  useEffect(() => {
+    // 从本地存储中加载用户数据
+    const userData = loadDouyinUserData();
+    if (userData) {
       setIsLoggedIn(true);
-      setUserInfo({
-        nickname: '抖音用户',
-        avatar: null,
-        likeCount: 1000,
-        fansCount: 500
-      });
+      setUserInfo(userData.user);
+    }
+  }, []);
+
+  // 抖音网页登录
+  const handleDouyinWebLogin = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // 先关闭模态框，然后再打开浏览器窗口
+      setShowLoginModal(false);
+
+      // 显示正在登录的提示
+      console.log('正在打开抖音网页登录...');
+
+      // 调用登录函数，这个过程可能需要一段时间
+      // 因为用户需要在浏览器窗口中手动登录
+      const result = await loginWithDouyinWeb();
+
+      if (result.success) {
+        setIsLoggedIn(true);
+        setUserInfo(result.user);
+      } else {
+        setError(result.error || '登录失败');
+      }
+    } catch (error) {
+      console.error('抖音网页登录失败:', error);
+      setError(`登录失败: ${error.message}`);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
+  // 抖音直播伴侣登录
+  const handleDouyinCompanionLogin = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // 先关闭模态框
+      setShowLoginModal(false);
+
+      // 显示正在检查直播伴侣的提示
+      console.log('正在检查直播伴侣...');
+
+      // 调用直播伴侣登录函数
+      // 这个过程会检查直播伴侣是否安装，并尝试启动它
+      const result = await loginWithDouyinCompanion();
+
+      if (result.success) {
+        setIsLoggedIn(true);
+        setUserInfo(result.user);
+      } else {
+        setError(result.error || '登录失败');
+      }
+    } catch (error) {
+      console.error('抖音直播伴侣登录失败:', error);
+      setError(`登录失败: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 退出登录
   const logout = () => {
+    clearDouyinUserData();
     setIsLoggedIn(false);
     setUserInfo(null);
   };
@@ -289,12 +350,20 @@ const HomePage = () => {
     if (isLoggedIn) {
       logout();
     } else {
-      await login();
+      // 显示登录选择模态框
+      setShowLoginModal(true);
     }
   };
 
   return (
     <div className="min-h-full bg-gray-900 text-white p-2 flex flex-col h-full gap-1">
+      {/* 登录选择模态框 */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onWebLogin={handleDouyinWebLogin}
+        onCompanionLogin={handleDouyinCompanionLogin}
+      />
       {/* 上部区域：直播设置 */}
       <div className="flex flex-row gap-3">
         {/* 左侧功能区域 - 自动推流组件 */}
