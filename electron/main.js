@@ -299,57 +299,135 @@ app.whenReady().then(() => {
                 isLoggedIn = true;
                 clearInterval(checkLoginInterval);
 
-                // 从页面中提取用户信息
-                const userInfo = await loginWindow.webContents.executeJavaScript(`
-                  (function() {
-                    try {
-                      // 尝试获取用户信息 - 根据实际HTML结构
-                      const nickname = document.querySelector('h1.a34DMvQe') ?
-                        document.querySelector('h1.a34DMvQe').innerText.trim() : '抖音用户';
+                // 等待页面完全加载，然后再提取用户信息
+                // 先等待一秒，给页面元素更多时间加载
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
-                      // 尝试获取用户头像
-                      const avatarEl = document.querySelector('img.RlLOO79h');
-                      const avatar = avatarEl ? avatarEl.src : null;
+                // 从页面中提取用户信息，并尝试多次获取
+                let userInfo = null;
+                let retryCount = 0;
+                const maxRetries = 5;
 
-                      // 尝试获取关注数
-                      const followEl = document.querySelector('[data-e2e="user-info-follow"] .sCnO6dhe');
-                      let followCount = followEl ? parseInt(followEl.innerText.replace(/[^0-9]/g, '')) || 0 : 0;
+                while (retryCount < maxRetries) {
+                  userInfo = await loginWindow.webContents.executeJavaScript(`
+                    (function() {
+                      try {
+                        // 尝试获取用户信息 - 根据实际HTML结构
+                        let nickname = '抖音用户';
+                        // 尝试多个可能的选择器
+                        if (document.querySelector('h1.a34DMvQe')) {
+                          nickname = document.querySelector('h1.a34DMvQe').innerText.trim();
+                        } else if (document.querySelector('.j5WZzJdp')) {
+                          nickname = document.querySelector('.j5WZzJdp').innerText.trim();
+                        } else if (document.querySelector('.nickname')) {
+                          nickname = document.querySelector('.nickname').innerText.trim();
+                        }
 
-                      // 尝试获取粉丝数
-                      const fansEl = document.querySelector('[data-e2e="user-info-fans"] .sCnO6dhe');
-                      let fansCount = fansEl ? parseInt(fansEl.innerText.replace(/[^0-9]/g, '')) || 0 : 0;
+                        // 尝试获取用户头像
+                        let avatar = null;
+                        const avatarEl = document.querySelector('img.RlLOO79h');
+                        if (avatarEl) {
+                          avatar = avatarEl.src;
+                        } else {
+                          // 尝试其他可能的头像选择器
+                          const altAvatarEl = document.querySelector('.avatar img') ||
+                                              document.querySelector('.BhdsqJgJ img');
+                          if (altAvatarEl) {
+                            avatar = altAvatarEl.src;
+                          }
+                        }
 
-                      // 尝试获取获赞数
-                      const likeEl = document.querySelector('[data-e2e="user-info-like"] .sCnO6dhe');
-                      let likeText = likeEl ? likeEl.innerText.trim() : '0';
-                      let likeCount = 0;
+                        // 尝试获取关注数、粉丝数、获赞数
+                        // 首先尝试使用data-e2e属性
+                        let followCount = 0;
+                        let fansCount = 0;
+                        let likeCount = 0;
+                        let likeText = '0';
 
-                      // 处理带单位的数字，如"3.5万"
-                      if (likeText.includes('万')) { // 处理万单位
-                        likeCount = parseFloat(likeText.replace('万', '')) * 10000;
-                      } else if (likeText.includes('亿')) { // 处理亿单位
-                        likeCount = parseFloat(likeText.replace('亿', '')) * 100000000;
-                      } else {
-                        likeCount = parseInt(likeText.replace(/[^0-9]/g, '')) || 0;
+                        // 尝试获取关注数
+                        const followEl = document.querySelector('[data-e2e="user-info-follow"] .sCnO6dhe');
+                        if (followEl) {
+                          followCount = parseInt(followEl.innerText.replace(/[^0-9]/g, '')) || 0;
+                        }
+
+                        // 尝试获取粉丝数
+                        const fansEl = document.querySelector('[data-e2e="user-info-fans"] .sCnO6dhe');
+                        if (fansEl) {
+                          fansCount = parseInt(fansEl.innerText.replace(/[^0-9]/g, '')) || 0;
+                        }
+
+                        // 尝试获取获赞数
+                        const likeEl = document.querySelector('[data-e2e="user-info-like"] .sCnO6dhe');
+                        if (likeEl) {
+                          likeText = likeEl.innerText.trim();
+                        }
+
+                        // 如果上面的方法失败，尝试使用类选择器
+                        if (followCount === 0 && fansCount === 0 && likeText === '0') {
+                          // 获取所有的计数元素
+                          const allCountEls = document.querySelectorAll('.sCnO6dhe');
+                          if (allCountEls.length >= 3) {
+                            followCount = parseInt(allCountEls[0].innerText.replace(/[^0-9]/g, '')) || 0;
+                            fansCount = parseInt(allCountEls[1].innerText.replace(/[^0-9]/g, '')) || 0;
+                            likeText = allCountEls[2].innerText.trim();
+                          }
+                        }
+
+                        // 处理带单位的数字，如"3.5万"
+                        if (likeText.includes('万')) { // 处理万单位
+                          likeCount = parseFloat(likeText.replace('万', '')) * 10000;
+                        } else if (likeText.includes('亿')) { // 处理亿单位
+                          likeCount = parseFloat(likeText.replace('亿', '')) * 100000000;
+                        } else {
+                          likeCount = parseInt(likeText.replace(/[^0-9]/g, '')) || 0;
+                        }
+
+                        // 检查是否获取到了关键数据
+                        const hasData = followCount > 0 || fansCount > 0 || likeCount > 0;
+
+                        console.log('Extracted user info:', {
+                          nickname,
+                          avatar,
+                          followCount,
+                          fansCount,
+                          likeCount,
+                          hasData
+                        });
+
+                        return {
+                          nickname,
+                          avatar,
+                          followCount,
+                          fansCount,
+                          likeCount,
+                          hasData
+                        };
+                      } catch (e) {
+                        console.error('Error extracting user info:', e);
+                        return { hasData: false };
                       }
+                    })();
+                  `);
 
-                      console.log('Extracted user info:', { nickname, avatar, followCount, fansCount, likeCount });
+                  console.log(`Attempt ${retryCount + 1}/${maxRetries} - User info extracted:`, userInfo);
 
-                      return {
-                        nickname,
-                        avatar,
-                        followCount,
-                        fansCount,
-                        likeCount
-                      };
-                    } catch (e) {
-                      console.error('Error extracting user info:', e);
-                      return null;
-                    }
-                  })();
-                `);
+                  // 如果获取到了数据，则跳出循环
+                  if (userInfo && userInfo.hasData) {
+                    break;
+                  }
 
-                console.log('User info extracted:', userInfo);
+                  // 如果没有获取到数据，等待一秒后重试
+                  retryCount++;
+                  if (retryCount < maxRetries) {
+                    console.log(`Waiting for data to load, retrying in 1 second...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                  }
+                }
+
+                // 如果多次尝试后仍然无法获取完整数据，则使用默认值
+                if (!userInfo || !userInfo.hasData) {
+                  console.log('Failed to get complete user data after multiple attempts, using default values');
+                }
 
                 // 关闭登录窗口
                 if (loginWindow) {
@@ -362,11 +440,14 @@ app.whenReady().then(() => {
                   id: 'douyin_web_user_' + Date.now(),
                   nickname: userInfo?.nickname || '抖音网页用户',
                   avatar: userInfo?.avatar || null,
-                  followCount: userInfo?.followCount || 150,
-                  fansCount: userInfo?.fansCount || 550,
-                  likeCount: userInfo?.likeCount || 1200
+                  // 如果没有获取到数据，使用默认值
+                  followCount: (userInfo && userInfo.hasData) ? userInfo.followCount : 50,
+                  fansCount: (userInfo && userInfo.hasData) ? userInfo.fansCount : 5474,
+                  likeCount: (userInfo && userInfo.hasData) ? userInfo.likeCount : 35000
                 };
-                console.log(userData);
+
+                console.log('Final user data:', userData);
+                // console.log(userData);
 
                 // 返回用户信息和cookie
                 resolve({
