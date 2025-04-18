@@ -23,7 +23,6 @@ contextBridge.exposeInMainWorld('electron', {
   getBilibiliStreamInfo: (token) => ipcRenderer.invoke('get-bilibili-stream-info', { token }),
 
   // 认证相关功能
-  loginDouyin: () => ipcRenderer.invoke('login-douyin'),
   loginDouyinWeb: () => ipcRenderer.invoke('login-douyin-web'),
   loginDouyinCompanion: () => ipcRenderer.invoke('login-douyin-companion'),
   loginBilibili: () => ipcRenderer.invoke('login-bilibili'),
