@@ -269,11 +269,18 @@ app.whenReady().then(() => {
             nodeIntegration: false,
             contextIsolation: true
           },
-          title: '抖音登录'
+          title: '抖音登录',
+          center: true,
+          resizable: false
         });
 
-        // 加载抖音登录页面
+        // 直接加载抖音登录页面
         loginWindow.loadURL('https://www.douyin.com/user/self');
+
+        // 在开发模式下打开开发者工具
+        if (!app.isPackaged) {
+          loginWindow.webContents.openDevTools({ mode: 'detach' });
+        }
 
         // 检测登录状态的变量
         let isLoggedIn = false;
@@ -292,23 +299,74 @@ app.whenReady().then(() => {
                 isLoggedIn = true;
                 clearInterval(checkLoginInterval);
 
-                // 获取用户信息
-                // 在实际应用中，这里应该从页面中提取用户信息
-                // 或者使用cookie调用抖音API获取用户信息
-                const userData = {
-                  id: 'douyin_web_user_' + Date.now(),
-                  nickname: '抖音网页用户',
-                  avatar: null,
-                  followCount: 150,
-                  fansCount: 550,
-                  likeCount: 1200
-                };
+                // 从页面中提取用户信息
+                const userInfo = await loginWindow.webContents.executeJavaScript(`
+                  (function() {
+                    try {
+                      // 尝试获取用户信息 - 根据实际HTML结构
+                      const nickname = document.querySelector('h1.a34DMvQe') ?
+                        document.querySelector('h1.a34DMvQe').innerText.trim() : '抖音用户';
+
+                      // 尝试获取用户头像
+                      const avatarEl = document.querySelector('img.RlLOO79h');
+                      const avatar = avatarEl ? avatarEl.src : null;
+
+                      // 尝试获取关注数
+                      const followEl = document.querySelector('[data-e2e="user-info-follow"] .sCnO6dhe');
+                      let followCount = followEl ? parseInt(followEl.innerText.replace(/[^0-9]/g, '')) || 0 : 0;
+
+                      // 尝试获取粉丝数
+                      const fansEl = document.querySelector('[data-e2e="user-info-fans"] .sCnO6dhe');
+                      let fansCount = fansEl ? parseInt(fansEl.innerText.replace(/[^0-9]/g, '')) || 0 : 0;
+
+                      // 尝试获取获赞数
+                      const likeEl = document.querySelector('[data-e2e="user-info-like"] .sCnO6dhe');
+                      let likeText = likeEl ? likeEl.innerText.trim() : '0';
+                      let likeCount = 0;
+
+                      // 处理带单位的数字，如"3.5万"
+                      if (likeText.includes('万')) { // 处理万单位
+                        likeCount = parseFloat(likeText.replace('万', '')) * 10000;
+                      } else if (likeText.includes('亿')) { // 处理亿单位
+                        likeCount = parseFloat(likeText.replace('亿', '')) * 100000000;
+                      } else {
+                        likeCount = parseInt(likeText.replace(/[^0-9]/g, '')) || 0;
+                      }
+
+                      console.log('Extracted user info:', { nickname, avatar, followCount, fansCount, likeCount });
+
+                      return {
+                        nickname,
+                        avatar,
+                        followCount,
+                        fansCount,
+                        likeCount
+                      };
+                    } catch (e) {
+                      console.error('Error extracting user info:', e);
+                      return null;
+                    }
+                  })();
+                `);
+
+                console.log('User info extracted:', userInfo);
 
                 // 关闭登录窗口
                 if (loginWindow) {
                   loginWindow.close();
                   loginWindow = null;
                 }
+
+                // 构建用户数据
+                const userData = {
+                  id: 'douyin_web_user_' + Date.now(),
+                  nickname: userInfo?.nickname || '抖音网页用户',
+                  avatar: userInfo?.avatar || null,
+                  followCount: userInfo?.followCount || 150,
+                  fansCount: userInfo?.fansCount || 550,
+                  likeCount: userInfo?.likeCount || 1200
+                };
+                console.log(userData);
 
                 // 返回用户信息和cookie
                 resolve({
@@ -372,7 +430,7 @@ app.whenReady().then(() => {
         console.log('正在启动直播伴侣...');
 
         // 使用child_process启动直播伴侣
-        const { exec } = require('child_process');
+        // 注意：我们已经在文件顶部导入了exec
         exec(`"${companionPath}"`, (error) => {
           if (error) {
             console.error(`启动直播伴侣错误: ${error}`);
