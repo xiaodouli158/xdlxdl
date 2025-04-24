@@ -46,8 +46,8 @@ const HomePage = () => {
         const storedObsVersion = localStorage.getItem('obsVersion');
         const storedCompanionVersion = localStorage.getItem('companionVersion');
 
-        // 如果已经有存储的版本信息且不是"检测中"或"未识别"，则使用存储的版本
-        if (storedObsVersion && storedObsVersion !== '检测中' && storedObsVersion !== '未识别') {
+        // 如果已经有存储的版本信息且不是"检测中"或"未检测到"，则使用存储的版本
+        if (storedObsVersion && storedObsVersion !== '检测中' && storedObsVersion !== '未检测到') {
           setObsVersion(storedObsVersion);
         } else {
           // 首先显示"检测中"状态
@@ -57,17 +57,17 @@ const HomePage = () => {
           if (typeof window !== 'undefined' && window.electron) {
             // 获取OBS版本
             const obsVer = await window.electron.getOBSVersion();
-            setObsVersion(obsVer || '未识别');
+            setObsVersion(obsVer || '未检测到');
             // 存储到本地存储
-            localStorage.setItem('obsVersion', obsVer || '未识别');
+            localStorage.setItem('obsVersion', obsVer || '未检测到');
           } else {
-            // 如果不在 Electron 环境中，显示未识别
-            setObsVersion('未识别');
-            localStorage.setItem('obsVersion', '未识别');
+            // 如果不在 Electron 环境中，显示未检测到
+            setObsVersion('未检测到');
+            localStorage.setItem('obsVersion', '未检测到');
           }
         }
 
-        if (storedCompanionVersion && storedCompanionVersion !== '检测中' && storedCompanionVersion !== '未识别') {
+        if (storedCompanionVersion && storedCompanionVersion !== '检测中' && storedCompanionVersion !== '未检测到') {
           setCompanionVersion(storedCompanionVersion);
         } else {
           // 首先显示"检测中"状态
@@ -77,21 +77,22 @@ const HomePage = () => {
           if (typeof window !== 'undefined' && window.electron) {
             // 获取伴侣版本
             const compVer = await window.electron.getCompanionVersion();
-            setCompanionVersion(compVer || '未识别');
+            setCompanionVersion(compVer || '未检测到');
             // 存储到本地存储
-            localStorage.setItem('companionVersion', compVer || '未识别');
+            localStorage.setItem('companionVersion', compVer || '未检测到');
           } else {
-            // 如果不在 Electron 环境中，显示未识别
-            setCompanionVersion('未识别');
-            localStorage.setItem('companionVersion', '未识别');
+            // 如果不在 Electron 环境中，显示未检测到
+            setCompanionVersion('未检测到');
+            localStorage.setItem('companionVersion', '未检测到');
           }
         }
       } catch (error) {
-        // 发生错误时显示未识别
-        setObsVersion('未识别');
-        setCompanionVersion('未识别');
-        localStorage.setItem('obsVersion', '未识别');
-        localStorage.setItem('companionVersion', '未识别');
+        // 发生错误时显示未检测到
+        console.error('版本检测出错:', error);
+        setObsVersion('未检测到');
+        setCompanionVersion('未检测到');
+        localStorage.setItem('obsVersion', '未检测到');
+        localStorage.setItem('companionVersion', '未检测到');
       }
     };
 
@@ -373,14 +374,14 @@ const HomePage = () => {
 
             <div className="flex flex-row items-center">
               <span className="text-slate-300 text-xs">OBS：</span>
-              <span className={`text-sm font-medium ${obsVersion === '检测中' ? 'text-blue-300 animate-pulse' : obsVersion === '未识别' ? 'text-red-300' : 'text-yellow-300'}`}>
+              <span className={`text-sm font-medium ${obsVersion === '检测中' ? 'text-blue-300 animate-pulse' : obsVersion === '未检测到' ? 'text-red-300' : 'text-yellow-300'}`}>
                 {obsVersion}
               </span>
             </div>
 
             <div className="flex flex-row items-center">
               <span className="text-slate-300 text-xs">伴侣：</span>
-              <span className={`text-sm font-medium ${companionVersion === '检测中' ? 'text-blue-300 animate-pulse' : companionVersion === '未识别' ? 'text-red-300' : 'text-yellow-300'}`}>
+              <span className={`text-sm font-medium ${companionVersion === '检测中' ? 'text-blue-300 animate-pulse' : companionVersion === '未检测到' ? 'text-red-300' : 'text-yellow-300'}`}>
                 {companionVersion}
               </span>
             </div>

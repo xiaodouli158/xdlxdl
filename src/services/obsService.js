@@ -11,6 +11,42 @@ class OBSService {
   }
 
   /**
+   * Detect OBS Studio version
+   * @returns {Promise<string>} OBS version or '未检测到'
+   */
+  async detectOBSVersion() {
+    try {
+      if (window.electron) {
+        const version = await window.electron.getOBSVersion();
+        this.obsVersion = version;
+        return version;
+      }
+      return '未检测到';
+    } catch (error) {
+      console.error('Failed to detect OBS version:', error);
+      return '未检测到';
+    }
+  }
+
+  /**
+   * Detect streaming companion version
+   * @returns {Promise<string>} Companion version or '未检测到'
+   */
+  async detectCompanionVersion() {
+    try {
+      if (window.electron) {
+        const version = await window.electron.getCompanionVersion();
+        this.companionVersion = version;
+        return version;
+      }
+      return '未检测到';
+    } catch (error) {
+      console.error('Failed to detect companion version:', error);
+      return '未检测到';
+    }
+  }
+
+  /**
    * Connect to OBS via WebSocket
    * @param {string} address - WebSocket address (default: localhost:4455)
    * @param {string} password - WebSocket password (if required)

@@ -100,9 +100,12 @@ app.whenReady().then(() => {
   // OBS版本号
   ipcMain.handle('get-obs-version', async () => {
     try {
+      console.log('正在获取OBS Studio版本...');
       const version = await getSoftwareVersion('OBS Studio');
+      console.log('OBS版本检测结果:', version);
       return version || '未检测到';
     } catch (e) {
+      console.error('获取OBS版本时出错:', e);
       return '未检测到';
     }
   });
@@ -110,9 +113,12 @@ app.whenReady().then(() => {
   // 伴侣版本号
   ipcMain.handle('get-companion-version', async () => {
     try {
+      console.log('正在获取直播伴侣版本...');
       const version = await getSoftwareVersion('直播伴侣');
+      console.log('直播伴侣版本检测结果:', version);
       return version || '未检测到';
     } catch (e) {
+      console.error('获取直播伴侣版本时出错:', e);
       return '未检测到';
     }
   });
