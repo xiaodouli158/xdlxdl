@@ -14,58 +14,82 @@ export const StreamingProvider = ({ children }) => {
   // OBS and companion versions
   const [obsVersion, setObsVersion] = useState(null);
   const [companionVersion, setCompanionVersion] = useState(null);
-  
+
   // Streaming settings
   const [autoMode, setAutoMode] = useState(true);
   const [platform, setPlatform] = useState('抖音');
   const [streamMethod, setStreamMethod] = useState('直播伴侣');
   const [streamUrl, setStreamUrl] = useState('');
   const [streamKey, setStreamKey] = useState('');
-  
+
   // Status flags
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [streamInfoSuccess, setStreamInfoSuccess] = useState(false);
   const [error, setError] = useState(null);
-  
+
   // User information
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
-  
-  // Load OBS and companion versions on mount
+
+  // 只在应用启动时加载OBS和伴侣版本，使用会话存储避免重复获取
   useEffect(() => {
     const loadVersions = async () => {
+      // 检查是否已经在当前会话中获取过版本信息
+      const versionChecked = sessionStorage.getItem('versionChecked');
+      const sessionObsVersion = sessionStorage.getItem('sessionObsVersion');
+      const sessionCompanionVersion = sessionStorage.getItem('sessionCompanionVersion');
+
+      // 如果当前会话已经检查过版本，直接使用会话中存储的版本
+      if (versionChecked === 'true' && sessionObsVersion && sessionCompanionVersion) {
+        console.log('StreamingContext: 使用会话中已获取的版本信息');
+        setObsVersion(sessionObsVersion);
+        setCompanionVersion(sessionCompanionVersion);
+        return;
+      }
+
+      // 首次启动应用，显示"检测中"状态
+      setObsVersion('检测中');
+      setCompanionVersion('检测中');
+
+      // 获取真实版本信息
       const obsVer = await obsService.detectOBSVersion();
       const compVer = await obsService.detectCompanionVersion();
-      
+
       setObsVersion(obsVer);
       setCompanionVersion(compVer);
+
+      // 将版本信息存储在会话存储中，以便在页面切换后使用
+      sessionStorage.setItem('versionChecked', 'true');
+      sessionStorage.setItem('sessionObsVersion', obsVer || '未检测到');
+      sessionStorage.setItem('sessionCompanionVersion', compVer || '未检测到');
     };
-    
+
+    // 只在组件挂载时执行一次
     loadVersions();
   }, []);
-  
+
   // Check authentication status on mount
   useEffect(() => {
     const checkAuth = () => {
       const isAuth = authService.isAuthenticated();
       setIsLoggedIn(isAuth);
-      
+
       if (isAuth) {
         setUserInfo(authService.getCurrentUser());
       }
     };
-    
+
     checkAuth();
   }, []);
-  
+
   // Toggle between auto and manual modes
   const toggleMode = () => {
     setAutoMode(!autoMode);
     // Reset stream info success flag when changing modes
     setStreamInfoSuccess(false);
   };
-  
+
   // Handle platform change
   const handlePlatformChange = (newPlatform) => {
     setPlatform(newPlatform);
@@ -79,22 +103,22 @@ export const StreamingProvider = ({ children }) => {
     // Reset stream info success flag when changing platform
     setStreamInfoSuccess(false);
   };
-  
+
   // Handle stream method change
   const handleMethodChange = (newMethod) => {
     setStreamMethod(newMethod);
     // Reset stream info success flag when changing method
     setStreamInfoSuccess(false);
   };
-  
+
   // Get streaming information
   const getStreamInfo = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const result = await workspaceStreamInfo(platform, streamMethod);
-      
+
       if (result.success) {
         setStreamUrl(result.streamUrl);
         setStreamKey(result.streamKey);
@@ -110,39 +134,39 @@ export const StreamingProvider = ({ children }) => {
       setIsLoading(false);
     }
   };
-  
+
   // Start automatic streaming
   const startAutoStreaming = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       // First get stream info
       const result = await workspaceStreamInfo(platform, streamMethod);
-      
+
       if (!result.success) {
         setError(result.message);
         return;
       }
-      
+
       // Set stream info
       setStreamUrl(result.streamUrl);
       setStreamKey(result.streamKey);
       setStreamInfoSuccess(true);
-      
+
       // Configure OBS and start streaming
       const obsResult = await obsService.configureStreamSettings(result.streamUrl, result.streamKey);
       if (!obsResult) {
         setError('无法配置OBS推流设置');
         return;
       }
-      
+
       const streamResult = await obsService.startStreaming();
       if (!streamResult) {
         setError('无法启动OBS推流');
         return;
       }
-      
+
       setIsStreaming(true);
     } catch (err) {
       setError('自动推流失败: ' + err.message);
@@ -150,11 +174,11 @@ export const StreamingProvider = ({ children }) => {
       setIsLoading(false);
     }
   };
-  
+
   // Stop streaming
   const stopStreaming = async () => {
     setIsLoading(true);
-    
+
     try {
       const result = await obsService.stopStreaming();
       if (result) {
@@ -168,15 +192,15 @@ export const StreamingProvider = ({ children }) => {
       setIsLoading(false);
     }
   };
-  
+
   // Handle login
   const login = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const success = await authService.login(platform);
-      
+
       if (success) {
         setIsLoggedIn(true);
         setUserInfo(authService.getCurrentUser());
@@ -189,7 +213,7 @@ export const StreamingProvider = ({ children }) => {
       setIsLoading(false);
     }
   };
-  
+
   // Handle logout
   const logout = () => {
     authService.logout();
@@ -198,30 +222,30 @@ export const StreamingProvider = ({ children }) => {
     // Reset stream info success flag when logging out
     setStreamInfoSuccess(false);
   };
-  
+
   // Context value
   const value = {
     // OBS and companion versions
     obsVersion,
     companionVersion,
-    
+
     // Streaming settings
     autoMode,
     platform,
     streamMethod,
     streamUrl,
     streamKey,
-    
+
     // Status flags
     isStreaming,
     isLoading,
     streamInfoSuccess,
     error,
-    
+
     // User information
     isLoggedIn,
     userInfo,
-    
+
     // Actions
     toggleMode,
     handlePlatformChange,
@@ -232,7 +256,7 @@ export const StreamingProvider = ({ children }) => {
     login,
     logout
   };
-  
+
   return (
     <StreamingContext.Provider value={value}>
       {children}
