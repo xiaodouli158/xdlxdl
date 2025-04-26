@@ -90,7 +90,7 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
-// 主函数
+// 主函数 - 提取抖音Cookie并返回结构化数据
 async function extractCookies() {
     console.log("开始提取抖音Cookie...");
 
@@ -111,7 +111,7 @@ async function extractCookies() {
 
     if (!foundValidBrowser) {
         console.error("错误: 未找到支持的浏览器数据。请检查浏览器安装和路径。");
-        return false;
+        return { success: false, error: "未找到支持的浏览器数据" };
     }
 
     try {
@@ -128,12 +128,12 @@ async function extractCookies() {
             localState = JSON.parse(localStateContent);
         } catch (error) {
             console.error(`解析Local State文件失败: ${error.message}`);
-            return false;
+            return { success: false, error: `解析Local State文件失败: ${error.message}` };
         }
 
         if (!localState.os_crypt || !localState.os_crypt.encrypted_key) {
             console.error("Local State文件中未找到加密密钥");
-            return false;
+            return { success: false, error: "Local State文件中未找到加密密钥" };
         }
 
         const encryptedKey = localState.os_crypt.encrypted_key;
@@ -163,7 +163,7 @@ async function extractCookies() {
 
         if (!fs.existsSync(tempKeyPath)) {
             console.error("错误: 无法解密主密钥");
-            return false;
+            return { success: false, error: "无法解密主密钥" };
         }
 
         // 3. 读取解密后的密钥
@@ -174,7 +174,7 @@ async function extractCookies() {
             const db = new sqlite3.Database(tempCookiesPath, sqlite3.OPEN_READONLY, (err) => {
                 if (err) {
                     console.error(`打开数据库出错: ${err.message}`);
-                    resolve(false);
+                    resolve({ success: false, error: `打开数据库出错: ${err.message}` });
                     return;
                 }
 
@@ -185,21 +185,21 @@ async function extractCookies() {
                     if (err) {
                         console.error(`查询数据库出错: ${err.message}`);
                         db.close();
-                        resolve(false);
+                        resolve({ success: false, error: `查询数据库出错: ${err.message}` });
                         return;
                     }
 
                     if (!rows || rows.length === 0) {
                         console.log("未找到抖音Cookie");
                         db.close();
-                        resolve(false);
+                        resolve({ success: false, error: "未找到抖音Cookie" });
                         return;
                     }
 
                     console.log(`找到 ${rows.length} 个抖音Cookie`);
 
                     // 处理Cookie
-                    const cookieLines = [];
+                    const cookieObjects = [];
 
                     for (const row of rows) {
                         try {
@@ -278,7 +278,12 @@ async function extractCookies() {
                             if (cookieValue) {
                                 // 清理cookie值，只保留可打印字符
                                 cookieValue = cookieValue.replace(/[^\x20-\x7E]/g, '');
-                                cookieLines.push(`${row.name}=${cookieValue}`);
+                                cookieObjects.push({
+                                    name: row.name,
+                                    value: cookieValue,
+                                    domain: row.host_key,
+                                    path: row.path || '/'
+                                });
                                 console.log(`成功解密Cookie: ${row.name}`);
                             } else {
                                 console.log(`无法解密Cookie: ${row.name}`);
@@ -290,72 +295,85 @@ async function extractCookies() {
 
                     db.close();
 
-                    if (cookieLines.length > 0) {
-                        // 保存到文件
-                        fs.writeFileSync(outputPath, cookieLines.join('; '), 'utf8');
-                        console.log(`已保存 ${cookieLines.length} 个Cookie到 ${outputPath}`);
-                        console.log("Cookie格式: name1=value1; name2=value2; ...");
-                        resolve(true);
+                    if (cookieObjects.length > 0) {
+                        console.log(`成功解密 ${cookieObjects.length} 个Cookie`);
+                        console.log(outputPath);
+                        resolve({
+                            success: true,
+                            cookies: cookieObjects,
+                            cookieString: cookieObjects.map(c => `${c.name}=${c.value}`).join('; ')
+                        });
                     } else {
                         console.log("解密后没有有效的Cookie");
-                        resolve(false);
+                        resolve({ success: false, error: "解密后没有有效的Cookie" });
                     }
                 });
             });
         });
+        
     } catch (error) {
         console.error(`提取Cookie时出错: ${error.message}`);
-        return false;
+        return { success: false, error: `提取Cookie时出错: ${error.message}` };
     } finally {
+        cleanup();
+    }
+    
+}
+
+// 如果直接运行此脚本，则执行提取并保存到文件
+if (import.meta.url === `file://${process.argv[1]}`) {
+    try {
+        console.log("========================================");
+        console.log("  抖音Cookie提取工具 - ES模块版本");
+        console.log("========================================");
+        console.log("遵循原则: 必须获取真实数据，获取不到就空");
+        console.log("----------------------------------------");
+
+        // 使用导出的函数
+        const result = await extractCookies();
+
+        if (result.success) {
+            // 保存到文件
+            fs.writeFileSync(outputPath, result.cookieString, 'utf8');
+            console.log(`已保存 ${result.cookies.length} 个Cookie到 ${outputPath}`);
+        } else {
+            console.log("\n未能提取有效的Cookie。创建空文件...");
+            fs.writeFileSync(outputPath, "", 'utf8');
+            console.log(`已创建空Cookie文件: ${outputPath}`);
+        }
+
+        console.log("\n脚本执行完成。");
+        console.log("----------------------------------------");
+
+        // 显示结果
+        if (fs.existsSync(outputPath)) {
+            const content = fs.readFileSync(outputPath, 'utf8');
+            if (content && content.trim().length > 0) {
+                console.log(`Cookie文件已保存: ${outputPath}`);
+                console.log(`文件大小: ${content.length} 字节`);
+                console.log(`Cookie数量: ${content.split(';').length}`);
+            } else {
+                console.log(`创建了空Cookie文件: ${outputPath}`);
+            }
+        }
+
+        console.log("========================================");
+    } catch (error) {
+        console.error(`\n执行过程中发生错误: ${error.message}`);
+        console.error(`错误堆栈: ${error.stack}`);
+
+        // 确保创建空文件
+        try {
+            fs.writeFileSync(outputPath, "", 'utf8');
+            console.log(`已创建空Cookie文件: ${outputPath}`);
+        } catch (e) {
+            console.error(`创建空文件失败: ${e.message}`);
+        }
+
+        // 确保清理临时文件
         cleanup();
     }
 }
 
-// 执行主函数
-try {
-    console.log("========================================");
-    console.log("  抖音Cookie提取工具 - ES模块版本");
-    console.log("========================================");
-    console.log("遵循原则: 必须获取真实数据，获取不到就空");
-    console.log("----------------------------------------");
-
-    const success = await extractCookies();
-
-    // 如果提取失败，创建空文件
-    if (!success) {
-        console.log("\n未能提取有效的Cookie。创建空文件...");
-        fs.writeFileSync(outputPath, "", 'utf8');
-        console.log(`已创建空Cookie文件: ${outputPath}`);
-    }
-
-    console.log("\n脚本执行完成。");
-    console.log("----------------------------------------");
-
-    // 显示结果
-    if (fs.existsSync(outputPath)) {
-        const content = fs.readFileSync(outputPath, 'utf8');
-        if (content && content.trim().length > 0) {
-            console.log(`Cookie文件已保存: ${outputPath}`);
-            console.log(`文件大小: ${content.length} 字节`);
-            console.log(`Cookie数量: ${content.split(';').length}`);
-        } else {
-            console.log(`创建了空Cookie文件: ${outputPath}`);
-        }
-    }
-
-    console.log("========================================");
-} catch (error) {
-    console.error(`\n执行过程中发生错误: ${error.message}`);
-    console.error(`错误堆栈: ${error.stack}`);
-
-    // 确保创建空文件
-    try {
-        fs.writeFileSync(outputPath, "", 'utf8');
-        console.log(`已创建空Cookie文件: ${outputPath}`);
-    } catch (e) {
-        console.error(`创建空文件失败: ${e.message}`);
-    }
-
-    // 确保清理临时文件
-    cleanup();
-}
+// 导出函数供其他模块使用
+export { extractCookies as getDouyinCookies };

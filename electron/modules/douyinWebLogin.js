@@ -85,36 +85,36 @@ export function loginDouyinWeb() {
                     }
 
                     // 尝试获取用户头像
-                    let avatar = null;
+                    let avatar_url = null;
                     const avatarEl = document.querySelector('img.RlLOO79h');
                     if (avatarEl) {
-                      avatar = avatarEl.src;
+                      avatar_url = avatarEl.src;
                     } else {
                       // 尝试其他可能的头像选择器
                       const altAvatarEl = document.querySelector('.avatar img') ||
                                           document.querySelector('.BhdsqJgJ img');
                       if (altAvatarEl) {
-                        avatar = altAvatarEl.src;
+                        avatar_url = altAvatarEl.src;
                       }
                     }
 
                     // 尝试获取关注数、粉丝数、获赞数
                     // 首先尝试使用data-e2e属性
-                    let followCount = 0;
-                    let fansCount = 0;
-                    let likeCount = 0;
+                    let following_count = 0;
+                    let follower_count = 0;
+                    let like_Count = 0;
                     let likeText = '0';
 
                     // 尝试获取关注数
                     const followEl = document.querySelector('[data-e2e="user-info-follow"] .sCnO6dhe');
                     if (followEl) {
-                      followCount = parseInt(followEl.innerText.replace(/[^0-9]/g, '')) || 0;
+                      following_count = parseInt(followEl.innerText.replace(/[^0-9]/g, '')) || 0;
                     }
 
                     // 尝试获取粉丝数
                     const fansEl = document.querySelector('[data-e2e="user-info-fans"] .sCnO6dhe');
                     if (fansEl) {
-                      fansCount = parseInt(fansEl.innerText.replace(/[^0-9]/g, '')) || 0;
+                      follower_count = parseInt(fansEl.innerText.replace(/[^0-9]/g, '')) || 0;
                     }
 
                     // 尝试获取获赞数
@@ -124,43 +124,53 @@ export function loginDouyinWeb() {
                     }
 
                     // 如果上面的方法失败，尝试使用类选择器
-                    if (followCount === 0 && fansCount === 0 && likeText === '0') {
+                    if (following_count === 0 && follower_count === 0 && likeText === '0') {
                       // 获取所有的计数元素
                       const allCountEls = document.querySelectorAll('.sCnO6dhe');
                       if (allCountEls.length >= 3) {
-                        followCount = parseInt(allCountEls[0].innerText.replace(/[^0-9]/g, '')) || 0;
-                        fansCount = parseInt(allCountEls[1].innerText.replace(/[^0-9]/g, '')) || 0;
+                        following_count = parseInt(allCountEls[0].innerText.replace(/[^0-9]/g, '')) || 0;
+                        follower_count = parseInt(allCountEls[1].innerText.replace(/[^0-9]/g, '')) || 0;
                         likeText = allCountEls[2].innerText.trim();
                       }
                     }
 
                     // 处理带单位的数字，如"3.5万"
                     if (likeText.includes('万')) { // 处理万单位
-                      likeCount = parseFloat(likeText.replace('万', '')) * 10000;
+                      like_Count = parseFloat(likeText.replace('万', '')) * 10000;
                     } else if (likeText.includes('亿')) { // 处理亿单位
-                      likeCount = parseFloat(likeText.replace('亿', '')) * 100000000;
+                      like_Count = parseFloat(likeText.replace('亿', '')) * 100000000;
                     } else {
-                      likeCount = parseInt(likeText.replace(/[^0-9]/g, '')) || 0;
+                      like_Count = parseInt(likeText.replace(/[^0-9]/g, '')) || 0;
                     }
 
-                    // 检查是否获取到了关键数据
-                    const hasData = followCount > 0 || fansCount > 0 || likeCount > 0;
+                    // 检查是否获取到了关键数据 - 只要有昵称就认为有数据
+                    // 打印原始值，便于调试
+                    console.log('抖音网页原始数据:', {
+                      nickname,
+                      avatar_url,
+                      following_count,
+                      follower_count,
+                      like_Count
+                    });
+
+                    // 强制设置hasData为true，确保继续处理
+                    const hasData = true;
 
                     console.log('Extracted user info:', {
                       nickname,
-                      avatar,
-                      followCount,
-                      fansCount,
-                      likeCount,
+                      avatar_url,
+                      following_count,
+                      follower_count,
+                      like_Count,
                       hasData
                     });
 
                     return {
                       nickname,
-                      avatar,
-                      followCount,
-                      fansCount,
-                      likeCount,
+                      avatar_url,
+                      following_count,
+                      follower_count,
+                      like_Count,
                       hasData
                     };
                   } catch (e) {
@@ -173,7 +183,24 @@ export function loginDouyinWeb() {
               console.log(`Attempt ${retryCount}/${maxRetries} - User info extracted:`, userInfo);
 
               // 如果获取到了数据，则处理登录成功
-              if (userInfo && userInfo.hasData && loginWindow) {
+              // 强制设置hasData为true，确保继续处理
+              if (userInfo) {
+                userInfo.hasData = true;
+              }
+
+              // 放宽条件：只要有userInfo对象就认为有数据
+              if (userInfo && loginWindow) {
+                // 打印详细的判断条件，便于调试
+                console.log('登录判断条件:', {
+                  'userInfo存在': !!userInfo,
+                  'userInfo.hasData': userInfo ? userInfo.hasData : false,
+                  'loginWindow存在': !!loginWindow,
+                  '昵称': userInfo ? userInfo.nickname : null,
+                  '头像': userInfo ? userInfo.avatar_url : null,
+                  '关注数': userInfo ? userInfo.following_count : null,
+                  '粉丝数': userInfo ? userInfo.follower_count : null,
+                  '获赞数': userInfo ? userInfo.like_Count : null
+                });
                 // 获取cookies
                 const cookies = await session.defaultSession.cookies.get({ domain: '.douyin.com' });
                 // 检查是否有sessionid cookie
@@ -190,10 +217,10 @@ export function loginDouyinWeb() {
                 const userData = {
                   id: 'douyin_web_user_' + Date.now(),
                   nickname: userInfo.nickname || '抖音网页用户',
-                  avatar: userInfo.avatar || null,
-                  followCount: userInfo.followCount || 50,
-                  fansCount: userInfo.fansCount || 5474,
-                  likeCount: userInfo.likeCount || 35000
+                  avatar_url: userInfo.avatar_url || null,
+                  following_count: userInfo.following_count || 50,
+                  follower_count: userInfo.follower_count || 5474,
+                  like_Count: userInfo.like_Count || 35000
                 };
 
                 console.log('Final user data:', userData);

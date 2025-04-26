@@ -580,9 +580,9 @@ const HomePage = () => {
                 {isLoggedIn && userInfo ? (
                   <div className="flex flex-col items-center">
                     <div className="w-15 h-16 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center overflow-hidden border-2 border-white/20 mb-3">
-                      {userInfo.avatar ? (
+                      {userInfo.avatar_url ? (
                         <img
-                          src={userInfo.avatar}
+                          src={userInfo.avatar_url}
                           alt="用户头像"
                           className="w-full h-full object-cover"
                         />
@@ -594,14 +594,14 @@ const HomePage = () => {
                     <div className="flex flex-col items-center">
                       <p className="text-white font-medium text-sm mb-2">{userInfo.nickname || '未知用户'}</p>
                       <div className="flex gap-2">
-                        {userInfo.likeCount && (
+                        {userInfo.follower_count && (
                           <div className="bg-slate-600/60 rounded-lg px-3 py-1 text-center border border-slate-500/30">
-                            <p className="text-xs text-blue-200">点赞: {userInfo.likeCount}</p>
+                            <p className="text-xs text-blue-200">关注: {userInfo.follower_count}</p>
                           </div>
                         )}
-                        {userInfo.fansCount && (
+                        {userInfo.following_count && (
                           <div className="bg-slate-600/60 rounded-lg px-3 py-1 text-center border border-slate-500/30">
-                            <p className="text-xs text-blue-200">粉丝: {userInfo.fansCount}</p>
+                            <p className="text-xs text-blue-200">粉丝: {userInfo.following_count}</p>
                           </div>
                         )}
                       </div>

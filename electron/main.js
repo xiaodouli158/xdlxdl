@@ -45,8 +45,28 @@ function createWindow() {
 
     // 开发环境下使用Vite开发服务器
     if (!app.isPackaged) {
-      console.log('Loading development URL: http://localhost:5173');
-      mainWindow.loadURL('http://localhost:5173');
+      // 尝试多个可能的端口
+      const tryLoadURL = async (ports) => {
+        for (const port of ports) {
+          try {
+            const url = `http://localhost:${port}`;
+            console.log(`尝试加载开发服务器 URL: ${url}`);
+            await mainWindow.loadURL(url);
+            console.log(`成功加载开发服务器 URL: ${url}`);
+            return true;
+          } catch (err) {
+            console.log(`无法加载端口 ${port}: ${err.message}`);
+          }
+        }
+        return false;
+      };
+
+      // 尝试端口 5173 和 5174
+      tryLoadURL([5173, 5174]).then(success => {
+        if (!success) {
+          console.error('无法加载任何开发服务器 URL');
+        }
+      });
       // 打开开发者工具
       mainWindow.webContents.openDevTools();
     } else {

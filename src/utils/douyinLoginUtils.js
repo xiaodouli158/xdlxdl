@@ -66,18 +66,34 @@ export const loginWithDouyinCompanion = async () => {
 /**
  * Save Douyin user data to localStorage
  * @param {Object} user User information
- * @param {string} cookies Cookie string
+ * @param {Array|string} cookies Cookie array or string
  */
 const saveDouyinUserData = (user, cookies) => {
   try {
+    // 处理cookies，确保我们保存的是一个标准格式
+    let cookieData = cookies;
+
+    // 如果cookies是数组，则转换为字符串格式以便于HTTP请求使用
+    if (Array.isArray(cookies)) {
+      // 创建一个webcookies变量，用于HTTP请求
+      const webcookies = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+
+      // 保存原始cookie数组和字符串格式
+      cookieData = {
+        cookieArray: cookies,
+        cookieString: webcookies
+      };
+    }
+
     const userData = {
       user,
-      cookies,
+      cookies: cookieData,
       platform: '抖音',
       loginTime: new Date().toISOString()
     };
 
     localStorage.setItem('douyinAuth', JSON.stringify(userData));
+    console.log('已保存抖音用户数据到本地存储');
   } catch (error) {
     console.error('Failed to save Douyin user data:', error);
   }
