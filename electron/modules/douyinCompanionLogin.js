@@ -10,6 +10,20 @@ import { getDouyinCookies } from './getDouyinCompanion_cookies.js';
 // 将回调函数转换为 Promise
 const fsAccess = promisify(fs.access);
 const fsReadFile = promisify(fs.readFile);
+const fsWriteFile = promisify(fs.writeFile);
+
+// 保存cookies到文件的函数
+async function saveCookiesToFile(cookies, cookieString) {
+  try {
+    const outputPath = path.join(__dirname, 'douyin_cookies.txt');
+    await fsWriteFile(outputPath, cookieString, 'utf8');
+    console.log(`已保存 ${cookies.length} 个Cookie到 ${outputPath}`);
+    return true;
+  } catch (error) {
+    console.error(`保存Cookie文件失败: ${error.message}`);
+    return false;
+  }
+}
 
 // 直播伴侣用户数据文件路径
 const APPDATA = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
@@ -276,6 +290,9 @@ export function loginDouyinCompanion() {
             }
 
             console.log(`成功获取 ${cookieResult.cookies.length} 个Cookie`);
+
+            // 保存cookies到文件
+            await saveCookiesToFile(cookieResult.cookies, cookieResult.cookieString);
 
             // 返回成功结果，包含用户信息和真实Cookie
             resolve({

@@ -297,7 +297,7 @@ async function extractCookies() {
 
                     if (cookieObjects.length > 0) {
                         console.log(`成功解密 ${cookieObjects.length} 个Cookie`);
-                        console.log(outputPath);
+                        // console.log(outputPath);
                         resolve({
                             success: true,
                             cookies: cookieObjects,
@@ -310,30 +310,79 @@ async function extractCookies() {
                 });
             });
         });
-        
+
     } catch (error) {
         console.error(`提取Cookie时出错: ${error.message}`);
         return { success: false, error: `提取Cookie时出错: ${error.message}` };
     } finally {
         cleanup();
     }
-    
+
 }
 
-// 如果直接运行此脚本，则执行提取并保存到文件
-if (import.meta.url === `file://${process.argv[1]}`) {
-    try {
-        console.log("========================================");
-        console.log("  抖音Cookie提取工具 - ES模块版本");
-        console.log("========================================");
-        console.log("遵循原则: 必须获取真实数据，获取不到就空");
-        console.log("----------------------------------------");
+// // 如果直接运行此脚本，则执行提取并保存到文件
+// if (import.meta.url === `file://${process.argv[1]}`) {
+//     try {
+//         console.log("========================================");
+//         console.log("  抖音Cookie提取工具 - ES模块版本");
+//         console.log("========================================");
+//         console.log("遵循原则: 必须获取真实数据，获取不到就空");
+//         console.log("----------------------------------------");
 
-        // 使用导出的函数
+//         // 使用导出的函数
+//         const result = await extractCookies();
+
+//         if (result.success) {
+//             // 保存到文件
+//             fs.writeFileSync(outputPath, result.cookieString, 'utf8');
+//             console.log(`已保存 ${result.cookies.length} 个Cookie到 ${outputPath}`);
+//         } else {
+//             console.log("\n未能提取有效的Cookie。创建空文件...");
+//             fs.writeFileSync(outputPath, "", 'utf8');
+//             console.log(`已创建空Cookie文件: ${outputPath}`);
+//         }
+
+//         console.log("\n脚本执行完成。");
+//         console.log("----------------------------------------");
+
+//         // 显示结果
+//         if (fs.existsSync(outputPath)) {
+//             const content = fs.readFileSync(outputPath, 'utf8');
+//             if (content && content.trim().length > 0) {
+//                 console.log(`Cookie文件已保存: ${outputPath}`);
+//                 console.log(`文件大小: ${content.length} 字节`);
+//                 console.log(`Cookie数量: ${content.split(';').length}`);
+//             } else {
+//                 console.log(`创建了空Cookie文件: ${outputPath}`);
+//             }
+//         }
+
+//         console.log("========================================");
+//     } catch (error) {
+//         console.error(`\n执行过程中发生错误: ${error.message}`);
+//         console.error(`错误堆栈: ${error.stack}`);
+
+//         // 确保创建空文件
+//         try {
+//             fs.writeFileSync(outputPath, "", 'utf8');
+//             console.log(`已创建空Cookie文件: ${outputPath}`);
+//         } catch (e) {
+//             console.error(`创建空文件失败: ${e.message}`);
+//         }
+
+//         // 确保清理临时文件
+//         cleanup();
+//     }
+// }
+
+// 导出函数供其他模块使用
+// 修改导出的函数，使其始终保存cookies到文件
+export async function getDouyinCookies() {
+    try {
         const result = await extractCookies();
 
-        if (result.success) {
-            // 保存到文件
+        // 无论是否直接运行脚本，都保存cookies到文件
+        if (result.success && result.cookieString) {
             fs.writeFileSync(outputPath, result.cookieString, 'utf8');
             console.log(`已保存 ${result.cookies.length} 个Cookie到 ${outputPath}`);
         } else {
@@ -342,25 +391,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             console.log(`已创建空Cookie文件: ${outputPath}`);
         }
 
-        console.log("\n脚本执行完成。");
-        console.log("----------------------------------------");
-
-        // 显示结果
-        if (fs.existsSync(outputPath)) {
-            const content = fs.readFileSync(outputPath, 'utf8');
-            if (content && content.trim().length > 0) {
-                console.log(`Cookie文件已保存: ${outputPath}`);
-                console.log(`文件大小: ${content.length} 字节`);
-                console.log(`Cookie数量: ${content.split(';').length}`);
-            } else {
-                console.log(`创建了空Cookie文件: ${outputPath}`);
-            }
-        }
-
-        console.log("========================================");
+        return result;
     } catch (error) {
-        console.error(`\n执行过程中发生错误: ${error.message}`);
-        console.error(`错误堆栈: ${error.stack}`);
+        console.error(`提取Cookie时出错: ${error.message}`);
 
         // 确保创建空文件
         try {
@@ -370,10 +403,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             console.error(`创建空文件失败: ${e.message}`);
         }
 
-        // 确保清理临时文件
+        return { success: false, error: `提取Cookie时出错: ${error.message}` };
+    } finally {
         cleanup();
     }
 }
-
-// 导出函数供其他模块使用
-export { extractCookies as getDouyinCookies };
