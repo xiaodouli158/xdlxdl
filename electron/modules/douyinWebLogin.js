@@ -1,5 +1,35 @@
 // douyinWebLogin.js - 抖音网页登录模块
 import { BrowserWindow, session, app } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// 获取当前文件的目录路径
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 定义cookie文件保存路径
+const cookieFilePath = path.join(__dirname, 'douyin_cookies.txt');
+
+/**
+ * 将cookies保存到文件
+ * @param {Array} cookies Cookie数组
+ * @returns {Promise<boolean>} 保存结果
+ */
+async function saveCookiesToFile(cookies) {
+  try {
+    // 将cookies转换为字符串格式
+    const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+
+    // 保存到文件
+    fs.writeFileSync(cookieFilePath, cookieString, 'utf8');
+    console.log(`已保存 ${cookies.length} 个Cookie到 ${cookieFilePath}`);
+    return true;
+  } catch (error) {
+    console.error(`保存Cookie文件失败: ${error.message}`);
+    return false;
+  }
+}
 
 /**
  * 打开抖音网页登录窗口并处理登录流程
@@ -225,6 +255,15 @@ export function loginDouyinWeb() {
                 const hasSessionId = cookies.some(cookie => cookie.name === 'sessionid');
                 console.log('Session ID cookie found:', hasSessionId);
 
+                // 保存cookies到文件
+                if (cookies && cookies.length > 0) {
+                  await saveCookiesToFile(cookies);
+
+                  // 创建cookieString并添加到返回结果中
+                  const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+                  console.log(`已生成Cookie字符串，长度: ${cookieString.length}`);
+                }
+
                 // 标记为已登录
                 isLoggedIn = true;
 
@@ -254,11 +293,15 @@ export function loginDouyinWeb() {
                   windowToClose.close();
                 }
 
+                // 创建cookieString
+                const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+
                 // 返回用户信息和cookie
                 resolve({
                   success: true,
                   user: userData,
-                  cookies: cookies
+                  cookies: cookies,
+                  cookieString: cookieString
                 });
               }
             } catch (error) {

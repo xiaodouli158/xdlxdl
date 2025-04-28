@@ -21,7 +21,7 @@ export const loginWithDouyinWeb = async () => {
     if (result.success) {
       console.log('抖音网页登录成功');
       // Save user data to localStorage
-      saveDouyinUserData(result.user, result.cookies);
+      saveDouyinUserData(result.user, result.cookies, result.cookieString);
       return result;
     } else {
       console.log('抖音网页登录失败:', result.error);
@@ -51,7 +51,7 @@ export const loginWithDouyinCompanion = async () => {
     if (result.success) {
       console.log('直播伴侣登录成功');
       // Save user data to localStorage
-      saveDouyinUserData(result.user, result.cookies);
+      saveDouyinUserData(result.user, result.cookies, result.cookieString);
       return result;
     } else {
       console.log('直播伴侣登录失败:', result.error);
@@ -66,9 +66,10 @@ export const loginWithDouyinCompanion = async () => {
 /**
  * Save Douyin user data to localStorage
  * @param {Object} user User information
- * @param {Array|string} cookies Cookie array or string
+ * @param {Array|Object} cookies Cookie array or object with cookieString
+ * @param {string} [cookieString] Optional cookie string if already available
  */
-const saveDouyinUserData = (user, cookies) => {
+const saveDouyinUserData = (user, cookies, cookieString) => {
   try {
     // 处理cookies，确保我们保存的是一个标准格式
     let cookieData = cookies;
@@ -76,13 +77,16 @@ const saveDouyinUserData = (user, cookies) => {
     // 如果cookies是数组，则转换为字符串格式以便于HTTP请求使用
     if (Array.isArray(cookies)) {
       // 创建一个webcookies变量，用于HTTP请求
-      const webcookies = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+      const webcookies = cookieString || cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
 
       // 保存原始cookie数组和字符串格式
       cookieData = {
         cookieArray: cookies,
         cookieString: webcookies
       };
+    } else if (typeof cookies === 'object' && cookies.cookieString) {
+      // 如果cookies对象已经包含cookieString，直接使用
+      cookieData = cookies;
     }
 
     const userData = {
