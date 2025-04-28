@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import obsService from '../services/obsService';
 import authService from '../services/authService';
 import { workspaceStreamInfo } from '../utils/obsUtils';
+import obsService from '../services/obsService';
 
 // Create context
 const StreamingContext = createContext();

@@ -33,9 +33,27 @@ const HomePage = () => {
   const [abortController, setAbortController] = useState(null);
   const [operationInProgress, setOperationInProgress] = useState(false);
 
+  // 用于存储重试定时器的引用
+  const [retryTimer, setRetryTimer] = useState(null);
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // 清除重试定时器的函数
+  const clearRetryTimer = () => {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      setRetryTimer(null);
+    }
+  };
+
+  // 组件卸载时清除定时器
+  useEffect(() => {
+    return () => {
+      clearRetryTimer();
+    };
+  }, []);
 
   // 页面加载时自动检测OBS和伴侣版本，但仅在应用启动后的第一次检测
   useEffect(() => {
@@ -114,6 +132,8 @@ const HomePage = () => {
       setOperationInProgress(false);
       setIsLoading(false);
       setError(null);
+      // 清除可能存在的重试定时器
+      clearRetryTimer();
       return;
     }
 
@@ -125,46 +145,112 @@ const HomePage = () => {
     setError(null);
     setStreamInfoSuccess(false);
 
-    try {
-      // 模拟异步操作
-      const timeoutPromise = new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          // 检查是否已经被中止
+    // 清除可能存在的重试定时器
+    clearRetryTimer();
+
+    // 定义获取推流信息的函数，以便可以重复调用
+    const fetchStreamInfo = async (isRetry = false) => {
+      try {
+        let result;
+
+        // 根据平台和直播方式获取推流信息
+        if (platform === '抖音' && streamMethod === '直播伴侣') {
+          // 从roomStore.json获取抖音直播伴侣的推流信息
+          console.log(`${isRetry ? '重试' : '开始'}从roomStore.json获取抖音直播伴侣的推流信息`);
+
+          if (window.electron) {
+            // 调用electron方法获取roomStore.json中的rtmp_push_url
+            result = await window.electron.getDouyinCompanionInfo();
+
+            if (result.error) {
+              throw new Error(result.error);
+            }
+
+            // 检查是否获取到了有效的推流地址
+            if (!result.streamUrl || !result.streamKey) {
+              throw new Error('未获取到有效的推流地址');
+            }
+          } else {
+            // 如果不在Electron环境中，抛出错误
+            throw new Error('无法获取推流信息：不在Electron环境中');
+          }
+        } else {
+          // 其他平台或直播方式暂不支持
+          throw new Error('暂不支持该平台或直播方式');
+        }
+
+        // 清除重试定时器
+        clearRetryTimer();
+
+        // 设置推流信息
+        setStreamUrl(result.streamUrl);
+        setStreamKey(result.streamKey);
+        setStreamInfoSuccess(true);
+
+        // 如果在Electron环境中，确保OBS WebSocket服务已启用
+        if (window.electron && autoMode) {
+          try {
+            console.log('确保 OBS WebSocket 服务已启用...');
+            // 确保 OBS WebSocket 服务已启用
+            const websocketEnabled = await window.electron.ensureOBSWebSocketEnabled();
+            if (!websocketEnabled) {
+              console.log('OBS WebSocket 服务启用失败，但仍然可以获取推流信息');
+            } else {
+              console.log('OBS WebSocket 服务已启用，可以随时开始推流');
+            }
+          } catch (error) {
+            console.error('检查 OBS WebSocket 服务时出错:', error);
+            // 这里不抛出错误，因为我们只是获取推流信息，不需要立即推流
+          }
+        }
+
+        setOperationInProgress(false);
+        setIsLoading(false);
+        setAbortController(null);
+
+        return true; // 表示成功获取
+      } catch (err) {
+        // 如果是用户取消操作，则不重试
+        if (err.message === '操作已被用户取消') {
+          clearRetryTimer();
+          return false;
+        }
+
+        // 如果是抖音直播伴侣模式且获取失败，则设置重试
+        if (platform === '抖音' && streamMethod === '直播伴侣') {
+          console.log(`获取推流信息失败: ${err.message}，2秒后重试...`);
+          setError(`获取推流信息中: ${err.message}，正在重试...`);
+
+          // 如果控制器已经被中止，则不再重试
           if (controller.signal.aborted) {
-            reject(new Error('操作已被用户取消'));
-            return;
+            return false;
           }
 
-          resolve({
-            streamUrl: 'rtmp://push.douyin.com/live',
-            streamKey: 'mock_key_' + Date.now()
-          });
-        }, 2000); // 模拟 2 秒的延迟
+          // 设置2秒后重试
+          const timer = setTimeout(() => {
+            if (!controller.signal.aborted) {
+              fetchStreamInfo(true);
+            }
+          }, 2000);
 
-        // 如果被中止，清除定时器
-        controller.signal.addEventListener('abort', () => {
-          clearTimeout(timeoutId);
-          reject(new Error('操作已被用户取消'));
-        });
-      });
-
-      // 等待异步操作完成
-      const result = await timeoutPromise;
-
-      // 设置推流信息
-      setStreamUrl(result.streamUrl);
-      setStreamKey(result.streamKey);
-      setStreamInfoSuccess(true);
-    } catch (err) {
-      if (err.message !== '操作已被用户取消') {
-        setError(`获取推流信息失败: ${err.message}`);
+          setRetryTimer(timer);
+          return false;
+        } else {
+          // 其他情况显示错误并结束
+          setError(`获取推流信息失败: ${err.message}`);
+          setOperationInProgress(false);
+          setIsLoading(false);
+          setAbortController(null);
+          return false;
+        }
       }
-    } finally {
-      setOperationInProgress(false);
-      setIsLoading(false);
-      setAbortController(null);
-    }
+    };
+
+    // 开始获取推流信息
+    fetchStreamInfo();
   };
+
+
 
   // 自动推流按钮点击处理
   const startAutoStreaming = async () => {
@@ -180,6 +266,8 @@ const HomePage = () => {
       setOperationInProgress(false);
       setIsLoading(false);
       setError(null);
+      // 清除可能存在的重试定时器
+      clearRetryTimer();
       return;
     }
 
@@ -191,57 +279,171 @@ const HomePage = () => {
     setError(null);
     setStreamInfoSuccess(false);
 
-    try {
-      // 模拟异步操作 - 获取推流信息
-      const timeoutPromise = new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          // 检查是否已经被中止
+    // 清除可能存在的重试定时器
+    clearRetryTimer();
+
+    // 定义获取推流信息的函数，以便可以重复调用
+    const fetchStreamInfo = async (isRetry = false) => {
+      try {
+        let result;
+
+        // 根据平台和直播方式获取推流信息
+        if (platform === '抖音' && streamMethod === '直播伴侣') {
+          // 从roomStore.json获取抖音直播伴侣的推流信息
+          console.log(`${isRetry ? '重试' : '开始'}从roomStore.json获取抖音直播伴侣的推流信息`);
+
+          if (window.electron) {
+            // 调用electron方法获取roomStore.json中的rtmp_push_url
+            result = await window.electron.getDouyinCompanionInfo();
+
+            if (result.error) {
+              throw new Error(result.error);
+            }
+
+            // 检查是否获取到了有效的推流地址
+            if (!result.streamUrl || !result.streamKey) {
+              throw new Error('未获取到有效的推流地址');
+            }
+          } else {
+            // 如果不在Electron环境中，抛出错误
+            throw new Error('无法获取推流信息：不在Electron环境中');
+          }
+        } else {
+          // 其他平台或直播方式暂不支持
+          throw new Error('暂不支持该平台或直播方式');
+        }
+
+        // 清除重试定时器
+        clearRetryTimer();
+
+        // 设置推流信息
+        setStreamUrl(result.streamUrl);
+        setStreamKey(result.streamKey);
+        setStreamInfoSuccess(true);
+
+        // 配置 OBS 并启动推流
+        if (window.electron) {
+          try {
+            // console.log('确保 OBS WebSocket 服务已启用...');
+            // // 确保 OBS WebSocket 服务已启用
+            // const websocketEnabled = await window.electron.ensureOBSWebSocketEnabled();
+            // if (!websocketEnabled) {
+            //   throw new Error('无法启用 OBS WebSocket 服务，请检查 OBS 安装');
+            // }
+
+            console.log('设置 OBS 推流参数...');
+            // 设置OBS推流参数
+            const settingsResult = await window.electron.setOBSStreamSettings(result.streamUrl, result.streamKey);
+            if (!settingsResult.success) {
+              throw new Error(settingsResult.message || '设置 OBS 推流参数失败');
+            }
+
+            console.log('启动 OBS 推流...');
+            // 启动OBS推流
+            const streamResult = await window.electron.startOBSStreaming();
+            if (!streamResult.success) {
+              throw new Error(streamResult.message || '启动 OBS 推流失败');
+            }
+
+            console.log('OBS 推流已成功启动');
+          } catch (error) {
+            console.error('OBS 推流设置失败:', error);
+            setError(`OBS 推流设置失败: ${error.message}`);
+            setOperationInProgress(false);
+            setIsLoading(false);
+            setAbortController(null);
+            return false;
+          }
+        } else {
+          // 在非Electron环境中模拟延迟
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        setIsStreaming(true);
+        setOperationInProgress(false);
+        setIsLoading(false);
+        setAbortController(null);
+
+        return true; // 表示成功获取
+      } catch (err) {
+        // 如果是用户取消操作，则不重试
+        if (err.message === '操作已被用户取消') {
+          clearRetryTimer();
+          return false;
+        }
+
+        // 如果是抖音直播伴侣模式且获取失败，则设置重试
+        if (platform === '抖音' && streamMethod === '直播伴侣') {
+          console.log(`获取推流信息失败: ${err.message}，2秒后重试...`);
+          setError(`获取推流信息中: ${err.message}，正在重试...`);
+
+          // 如果控制器已经被中止，则不再重试
           if (controller.signal.aborted) {
-            reject(new Error('操作已被用户取消'));
-            return;
+            return false;
           }
 
-          resolve({
-            streamUrl: 'rtmp://push.douyin.com/live',
-            streamKey: 'mock_key_' + Date.now()
-          });
-        }, 2000); // 模拟 2 秒的延迟
+          // 设置2秒后重试
+          const timer = setTimeout(() => {
+            if (!controller.signal.aborted) {
+              fetchStreamInfo(true);
+            }
+          }, 2000);
 
-        // 如果被中止，清除定时器
-        controller.signal.addEventListener('abort', () => {
-          clearTimeout(timeoutId);
-          reject(new Error('操作已被用户取消'));
-        });
-      });
-
-      // 等待异步操作完成
-      const result = await timeoutPromise;
-
-      // 设置推流信息
-      setStreamUrl(result.streamUrl);
-      setStreamKey(result.streamKey);
-      setStreamInfoSuccess(true);
-
-      // 模拟配置 OBS 并启动推流
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setIsStreaming(true);
-    } catch (err) {
-      if (err.message !== '操作已被用户取消') {
-        setError(`自动推流失败: ${err.message}`);
+          setRetryTimer(timer);
+          return false;
+        } else {
+          // 其他情况显示错误并结束
+          setError(`自动推流失败: ${err.message}`);
+          setOperationInProgress(false);
+          setIsLoading(false);
+          setAbortController(null);
+          return false;
+        }
       }
-    } finally {
-      setOperationInProgress(false);
-      setIsLoading(false);
-      setAbortController(null);
-    }
+    };
+
+    // 开始获取推流信息
+    fetchStreamInfo();
   };
 
   const stopStreaming = async () => {
     setIsLoading(true);
+    setError(null);
+
+    // 清除可能存在的重试定时器
+    clearRetryTimer();
+
+    // 如果有正在进行的操作，中止它
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+
+    // 如果在Electron环境中，调用停止推流方法
+    if (window.electron) {
+      try {
+        console.log('正在停止 OBS 推流...');
+        const result = await window.electron.stopOBSStreaming();
+
+        if (!result.success) {
+          console.warn('停止 OBS 推流返回警告:', result.message);
+          // 即使停止失败，我们也继续重置UI状态，因为用户已经明确要求停止
+        } else {
+          console.log('成功停止 OBS 推流');
+        }
+      } catch (error) {
+        console.error('停止 OBS 推流失败:', error);
+        // 显示错误但继续重置UI状态
+        setError(`停止推流时出错: ${error.message}`);
+      }
+    }
+
+    // 无论停止是否成功，都重置UI状态
     setTimeout(() => {
       setIsStreaming(false);
       setStreamInfoSuccess(false); // 移除成功图标
       setIsLoading(false);
+      setOperationInProgress(false);
     }, 1000);
   };
 

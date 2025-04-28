@@ -4,10 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import { promisify } from 'util';
 import { getSoftwareVersion, getSoftwarePath } from '../src/utils/Findsoftpaths.js';
 import { loginDouyinWeb } from './modules/douyinWebLogin.js';
 import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
+import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
 
 // 将回调函数转换为 Promise
 const execAsync = promisify(exec);
@@ -21,9 +23,6 @@ const __dirname = path.dirname(__filename);
 
 // 定义全局变量以存储窗口引用
 let mainWindow = null;
-
-// OBS WebSocket 客户端
-let obsWebSocket = null;
 
 // 创建浏览器窗口函数
 function createWindow() {
@@ -143,83 +142,130 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('connect-to-obs', async (event, { address, password }) => {
-    try {
-      // 在实际应用中，这里应该使用 OBS WebSocket 客户端库
-      // 例如：安装 obs-websocket-js 并实现连接逻辑
-      console.log(`Connecting to OBS at ${address} with password: ${password ? '******' : 'none'}`);
-
-      // 模拟成功连接
-      return { success: true, message: '成功连接到 OBS' };
-    } catch (error) {
-      console.error('Failed to connect to OBS:', error);
-      return { success: false, message: error.message };
-    }
-  });
-
-  ipcMain.handle('ensure-obs-websocket-enabled', async () => {
-    try {
-      // 在实际应用中，这里应该检查 OBS 配置文件并启用 WebSocket
-      console.log('Ensuring OBS WebSocket is enabled');
-
-      // 模拟成功启用
-      return true;
-    } catch (error) {
-      console.error('Failed to ensure OBS WebSocket is enabled:', error);
-      return false;
-    }
-  });
-
-  ipcMain.handle('set-obs-stream-settings', async (event, { streamUrl, streamKey }) => {
-    try {
-      // 在实际应用中，这里应该使用 OBS WebSocket 客户端设置推流参数
-      console.log(`Setting OBS stream settings - URL: ${streamUrl}, Key: ${streamKey ? '******' : 'none'}`);
-
-      // 模拟成功设置
-      return true;
-    } catch (error) {
-      console.error('Failed to set OBS stream settings:', error);
-      return false;
-    }
-  });
-
-  ipcMain.handle('start-obs-streaming', async () => {
-    try {
-      // 在实际应用中，这里应该使用 OBS WebSocket 客户端启动推流
-      console.log('Starting OBS streaming');
-
-      // 模拟成功启动
-      return true;
-    } catch (error) {
-      console.error('Failed to start OBS streaming:', error);
-      return false;
-    }
-  });
-
-  ipcMain.handle('stop-obs-streaming', async () => {
-    try {
-      // 在实际应用中，这里应该使用 OBS WebSocket 客户端停止推流
-      console.log('Stopping OBS streaming');
-
-      // 模拟成功停止
-      return true;
-    } catch (error) {
-      console.error('Failed to stop OBS streaming:', error);
-      return false;
-    }
-  });
+  // 注册 OBS WebSocket 相关的 IPC 处理函数
+  registerOBSWebSocketHandlers(ipcMain);
 
   // 直播平台相关功能
   ipcMain.handle('get-douyin-companion-info', async () => {
     try {
-      // 在实际应用中，这里应该从直播伴侣程序中获取推流信息
-      console.log('Getting Douyin companion info');
+      // 从直播伴侣的roomStore.json文件中获取推流信息
+      console.log('Getting Douyin companion info from roomStore.json');
 
-      // 模拟推流信息
-      return {
-        streamUrl: 'rtmp://push.douyin.com/live',
-        streamKey: 'mock_douyin_companion_key_' + Date.now()
-      };
+      // 定义roomStore.json文件路径
+      const ROOM_STORE_PATH = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+                                       'webcast_mate', 'WBStore', 'roomStore.json');
+
+      // 检查文件是否存在
+      try {
+        await fsAccess(ROOM_STORE_PATH, fs.constants.R_OK);
+        console.log('找到roomStore.json文件');
+
+        // 读取文件内容
+        const roomStoreData = await fsReadFile(ROOM_STORE_PATH, 'utf8');
+
+        try {
+          // 解析JSON
+          const roomStore = JSON.parse(roomStoreData);
+          console.log('成功解析roomStore.json文件');
+
+          // 打印roomStore的顶层结构，帮助调试
+          console.log('roomStore顶层结构:', Object.keys(roomStore));
+
+          // 尝试查找rtmp_push_url的位置
+          let rtmpPushUrl = null;
+
+          // 情况1: 直接在顶层
+          if (roomStore.rtmp_push_url) {
+            rtmpPushUrl = roomStore.rtmp_push_url;
+            console.log('在顶层找到RTMP推流地址');
+          }
+          // 情况2: 在roomStore.settings.stream_url中
+          else if (roomStore.settings &&
+                  roomStore.settings.stream_url &&
+                  roomStore.settings.stream_url.rtmp_push_url) {
+            rtmpPushUrl = roomStore.settings.stream_url.rtmp_push_url;
+            console.log('在settings.stream_url中找到RTMP推流地址');
+          }
+          // 情况3: 在roomStore.roomStore.settings.stream_url中
+          else if (roomStore.roomStore &&
+                  roomStore.roomStore.settings &&
+                  roomStore.roomStore.settings.stream_url &&
+                  roomStore.roomStore.settings.stream_url.rtmp_push_url) {
+            rtmpPushUrl = roomStore.roomStore.settings.stream_url.rtmp_push_url;
+            console.log('在roomStore.settings.stream_url中找到RTMP推流地址');
+          }
+
+          // 如果找到了RTMP推流地址
+          if (rtmpPushUrl) {
+            console.log('找到RTMP推流地址:', rtmpPushUrl);
+          } else {
+            // 如果没有找到，打印更多的调试信息
+            console.error('未找到RTMP推流地址，打印完整的JSON结构以便调试:');
+            // 打印前1000个字符，避免日志过长
+            console.error(JSON.stringify(roomStore, null, 2).substring(0, 1000) + '...');
+
+            // 尝试递归查找包含rtmp_push_url的对象
+            const findRtmpUrl = (obj, path = '') => {
+              if (!obj || typeof obj !== 'object') return;
+
+              for (const key in obj) {
+                const newPath = path ? `${path}.${key}` : key;
+
+                if (key === 'rtmp_push_url') {
+                  console.log(`找到rtmp_push_url在路径: ${newPath}, 值: ${obj[key]}`);
+                  rtmpPushUrl = obj[key];
+                  return true;
+                }
+
+                if (typeof obj[key] === 'object' && obj[key] !== null) {
+                  if (findRtmpUrl(obj[key], newPath)) return true;
+                }
+              }
+
+              return false;
+            };
+
+            // 尝试递归查找
+            findRtmpUrl(roomStore);
+          }
+
+          // 再次检查是否找到了RTMP推流地址
+          if (rtmpPushUrl) {
+
+            // 拆分RTMP URL为推流地址和推流密钥
+            // RTMP URL格式通常为: rtmp://server/app/stream_key
+            const lastSlashIndex = rtmpPushUrl.lastIndexOf('/');
+
+            if (lastSlashIndex !== -1 && lastSlashIndex < rtmpPushUrl.length - 1) {
+              const streamUrl = rtmpPushUrl.substring(0, lastSlashIndex);
+              const streamKey = rtmpPushUrl.substring(lastSlashIndex + 1);
+
+              console.log(`已拆分RTMP URL - 推流地址: ${streamUrl}, 推流密钥: ${streamKey ? '******' : 'none'}`);
+
+              return {
+                streamUrl,
+                streamKey
+              };
+            } else {
+              console.error('无法拆分RTMP URL:', rtmpPushUrl);
+              return {
+                streamUrl: rtmpPushUrl,
+                streamKey: ''
+              };
+            }
+          } else {
+            console.error('roomStore.json中未找到rtmp_push_url字段');
+            // 返回错误信息，不提供模拟数据
+            throw new Error('roomStore.json中未找到rtmp_push_url字段，请确保直播伴侣已正确启动并创建了直播间');
+          }
+        } catch (parseError) {
+          console.error('解析roomStore.json文件失败:', parseError);
+          throw new Error('解析roomStore.json文件失败: ' + parseError.message);
+        }
+      } catch (fileError) {
+        console.error('无法访问roomStore.json文件:', fileError);
+        throw new Error('无法访问roomStore.json文件: ' + fileError.message);
+      }
     } catch (error) {
       console.error('Failed to get Douyin companion info:', error);
       return { error: error.message };
