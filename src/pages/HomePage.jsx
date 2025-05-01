@@ -13,11 +13,15 @@ import { loginWithDouyinWeb, loginWithDouyinCompanion, loadDouyinUserData, clear
 const HomePage = () => {
   const navigate = useNavigate();
 
-  // 模拟数据，实际中这些会来自上下文
+  // 从本地存储加载用户之前的选择
 
   const [autoMode, setAutoMode] = useState(true);
-  const [platform, setPlatform] = useState('抖音');
-  const [streamMethod, setStreamMethod] = useState('直播伴侣');
+  const [platform, setPlatform] = useState(() => {
+    return localStorage.getItem('selectedPlatform') || '抖音';
+  });
+  const [streamMethod, setStreamMethod] = useState(() => {
+    return localStorage.getItem('selectedStreamMethod') || '直播伴侣';
+  });
   const [streamUrl, setStreamUrl] = useState('');
   const [streamKey, setStreamKey] = useState('');
 
@@ -124,10 +128,20 @@ const HomePage = () => {
     fetchVersions();
   }, []); // 空依赖数组确保只在组件挂载时执行一次
 
-  // 模拟操作
+  // 处理用户选择变更并保存到本地存储
   const toggleMode = () => setAutoMode(!autoMode);
-  const handlePlatformChange = (newPlatform) => setPlatform(newPlatform);
-  const handleMethodChange = (newMethod) => setStreamMethod(newMethod);
+
+  const handlePlatformChange = (newPlatform) => {
+    setPlatform(newPlatform);
+    // 保存到本地存储
+    localStorage.setItem('selectedPlatform', newPlatform);
+  };
+
+  const handleMethodChange = (newMethod) => {
+    setStreamMethod(newMethod);
+    // 保存到本地存储
+    localStorage.setItem('selectedStreamMethod', newMethod);
+  };
 
   // 获取推流码按钮点击处理
   const getStreamInfo = async () => {
