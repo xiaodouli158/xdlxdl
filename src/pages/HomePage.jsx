@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Check, AlertCircle, Link, Key, Copy } from 'lucide-react';
 import LoginModal from '../components/LoginModal';
+import AuthNotification from '../components/AuthNotification';
 import { useNavigate } from 'react-router-dom';
 import { loginWithDouyinWeb, loginWithDouyinCompanion, loadDouyinUserData, clearDouyinUserData } from '../utils/douyinLoginUtils';
 // import { useStreaming } from '../context/StreamingContext';
@@ -39,6 +40,10 @@ const HomePage = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // 安全认证相关状态
+  const [showAuthNotification, setShowAuthNotification] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
 
   // 清除重试定时器的函数
   const clearRetryTimer = () => {
@@ -154,16 +159,70 @@ const HomePage = () => {
         let result;
 
         // 根据平台和直播方式获取推流信息
-        if (platform === '抖音' && streamMethod === '直播伴侣') {
-          // 从roomStore.json获取抖音直播伴侣的推流信息
-          console.log(`${isRetry ? '重试' : '开始'}从roomStore.json获取抖音直播伴侣的推流信息`);
-
+        if (platform === '抖音') {
           if (window.electron) {
-            // 调用electron方法获取roomStore.json中的rtmp_push_url
-            result = await window.electron.getDouyinCompanionInfo();
+            // 根据直播方式选择不同的API
+            if (streamMethod === '直播伴侣') {
+              // 从roomStore.json获取抖音直播伴侣的推流信息
+              console.log(`${isRetry ? '重试' : '开始'}从roomStore.json获取抖音直播伴侣的推流信息`);
+
+              // 调用electron方法获取roomStore.json中的rtmp_push_url
+              result = await window.electron.getDouyinCompanionInfo();
+            }
+            else if (streamMethod === '手机开播') {
+              // 获取最新的直播间信息（getLatestRoomInfo）
+              console.log(`${isRetry ? '重试' : '开始'}获取抖音最新直播间信息`);
+
+              // 调用electron方法获取最新直播间信息
+              result = await window.electron.getDouyinApiInfo(null, 'get');
+            }
+            else if (streamMethod === '自动开播') {
+              // 创建新的直播间（createLiveRoom）
+              console.log(`${isRetry ? '重试' : '开始'}创建抖音直播间`);
+
+              // 调用electron方法创建新直播间
+              result = await window.electron.getDouyinApiInfo(null, 'create');
+            }
+            else {
+              throw new Error(`不支持的直播方式: ${streamMethod}`);
+            }
 
             if (result.error) {
               throw new Error(result.error);
+            }
+
+            // 检查是否需要安全认证
+            if (result.requiresAuth && result.authUrl) {
+              console.log('需要进行安全认证，打开认证页面...');
+
+              // 打开认证URL
+              await window.electron.openAuthUrl(result.authUrl);
+
+              // 显示简洁的认证通知
+              setAuthMessage('用户开播安全检测，请完成后重试');
+              setShowAuthNotification(true);
+
+              // 清除重试定时器
+              clearRetryTimer();
+
+              // 重置状态
+              setOperationInProgress(false);
+              setIsLoading(false);
+              setAbortController(null);
+
+              // 返回 false 表示获取失败，但不再自动重试
+              return false;
+            }
+
+            // 检查是否需要重试（手机开播模式下，状态不为2）
+            if (result.needsRetry) {
+              console.log(`直播间未准备好，当前状态: ${result.currentStatus}，期望状态: ${result.expectedStatus}`);
+
+              // 不显示状态信息，只在控制台记录
+              console.log(`直播间准备中，当前状态: ${result.currentStatus}，等待状态变为2`);
+
+              // 继续重试获取推流信息，但不显示错误消息
+              throw new Error('直播间准备中');
             }
 
             // 检查是否获取到了有效的推流地址
@@ -175,8 +234,8 @@ const HomePage = () => {
             throw new Error('无法获取推流信息：不在Electron环境中');
           }
         } else {
-          // 其他平台或直播方式暂不支持
-          throw new Error('暂不支持该平台或直播方式');
+          // 其他平台暂不支持
+          throw new Error('暂不支持该平台');
         }
 
         // 清除重试定时器
@@ -186,6 +245,26 @@ const HomePage = () => {
         setStreamUrl(result.streamUrl);
         setStreamKey(result.streamKey);
         setStreamInfoSuccess(true);
+
+        // 如果是手机开播模式，并且获取到了房间ID和流ID，则维持直播状态
+        if (streamMethod === '手机开播' && result.roomId && result.streamId) {
+          try {
+            console.log('开始维持直播状态...');
+            const maintainResult = await window.electron.maintainDouyinStream(
+              result.roomId,
+              result.streamId,
+              'phone'
+            );
+
+            if (maintainResult.success) {
+              console.log('直播状态维持已启动');
+            } else {
+              console.warn('直播状态维持启动失败:', maintainResult.error);
+            }
+          } catch (error) {
+            console.error('启动直播状态维持时出错:', error);
+          }
+        }
 
         // 如果在Electron环境中，确保OBS WebSocket服务已启用
         if (window.electron && autoMode) {
@@ -216,10 +295,12 @@ const HomePage = () => {
           return false;
         }
 
-        // 如果是抖音直播伴侣模式且获取失败，则设置重试
-        if (platform === '抖音' && streamMethod === '直播伴侣') {
+        // 如果是抖音平台且获取失败，则设置重试
+        if (platform === '抖音') {
+          // 只在控制台记录错误，不在UI上显示
           console.log(`获取推流信息失败: ${err.message}，2秒后重试...`);
-          setError(`获取推流信息中: ${err.message}，正在重试...`);
+          // 不设置错误消息，保持UI干净
+          setError(null);
 
           // 如果控制器已经被中止，则不再重试
           if (controller.signal.aborted) {
@@ -288,16 +369,70 @@ const HomePage = () => {
         let result;
 
         // 根据平台和直播方式获取推流信息
-        if (platform === '抖音' && streamMethod === '直播伴侣') {
-          // 从roomStore.json获取抖音直播伴侣的推流信息
-          console.log(`${isRetry ? '重试' : '开始'}从roomStore.json获取抖音直播伴侣的推流信息`);
-
+        if (platform === '抖音') {
           if (window.electron) {
-            // 调用electron方法获取roomStore.json中的rtmp_push_url
-            result = await window.electron.getDouyinCompanionInfo();
+            // 根据直播方式选择不同的API
+            if (streamMethod === '直播伴侣') {
+              // 从roomStore.json获取抖音直播伴侣的推流信息
+              console.log(`${isRetry ? '重试' : '开始'}从roomStore.json获取抖音直播伴侣的推流信息`);
+
+              // 调用electron方法获取roomStore.json中的rtmp_push_url
+              result = await window.electron.getDouyinCompanionInfo();
+            }
+            else if (streamMethod === '手机开播') {
+              // 获取最新的直播间信息（getLatestRoomInfo）
+              console.log(`${isRetry ? '重试' : '开始'}获取抖音最新直播间信息`);
+
+              // 调用electron方法获取最新直播间信息
+              result = await window.electron.getDouyinApiInfo(null, 'get');
+            }
+            else if (streamMethod === '自动开播') {
+              // 创建新的直播间（createLiveRoom）
+              console.log(`${isRetry ? '重试' : '开始'}创建抖音直播间`);
+
+              // 调用electron方法创建新直播间
+              result = await window.electron.getDouyinApiInfo(null, 'create');
+            }
+            else {
+              throw new Error(`不支持的直播方式: ${streamMethod}`);
+            }
 
             if (result.error) {
               throw new Error(result.error);
+            }
+
+            // 检查是否需要安全认证
+            if (result.requiresAuth && result.authUrl) {
+              console.log('需要进行安全认证，打开认证页面...');
+
+              // 打开认证URL
+              await window.electron.openAuthUrl(result.authUrl);
+
+              // 显示简洁的认证通知
+              setAuthMessage('用户开播安全检测，请完成后重试');
+              setShowAuthNotification(true);
+
+              // 清除重试定时器
+              clearRetryTimer();
+
+              // 重置状态
+              setOperationInProgress(false);
+              setIsLoading(false);
+              setAbortController(null);
+
+              // 返回 false 表示获取失败，但不再自动重试
+              return false;
+            }
+
+            // 检查是否需要重试（手机开播模式下，状态不为2）
+            if (result.needsRetry) {
+              console.log(`直播间未准备好，当前状态: ${result.currentStatus}，期望状态: ${result.expectedStatus}`);
+
+              // 不显示状态信息，只在控制台记录
+              console.log(`直播间准备中，当前状态: ${result.currentStatus}，等待状态变为2`);
+
+              // 继续重试获取推流信息，但不显示错误消息
+              throw new Error('直播间准备中');
             }
 
             // 检查是否获取到了有效的推流地址
@@ -309,8 +444,8 @@ const HomePage = () => {
             throw new Error('无法获取推流信息：不在Electron环境中');
           }
         } else {
-          // 其他平台或直播方式暂不支持
-          throw new Error('暂不支持该平台或直播方式');
+          // 其他平台暂不支持
+          throw new Error('暂不支持该平台');
         }
 
         // 清除重试定时器
@@ -320,6 +455,26 @@ const HomePage = () => {
         setStreamUrl(result.streamUrl);
         setStreamKey(result.streamKey);
         setStreamInfoSuccess(true);
+
+        // 如果是手机开播模式，并且获取到了房间ID和流ID，则维持直播状态
+        if (streamMethod === '手机开播' && result.roomId && result.streamId) {
+          try {
+            console.log('开始维持直播状态...');
+            const maintainResult = await window.electron.maintainDouyinStream(
+              result.roomId,
+              result.streamId,
+              'phone'
+            );
+
+            if (maintainResult.success) {
+              console.log('直播状态维持已启动');
+            } else {
+              console.warn('直播状态维持启动失败:', maintainResult.error);
+            }
+          } catch (error) {
+            console.error('启动直播状态维持时出错:', error);
+          }
+        }
 
         // 配置 OBS 并启动推流
         if (window.electron) {
@@ -372,10 +527,12 @@ const HomePage = () => {
           return false;
         }
 
-        // 如果是抖音直播伴侣模式且获取失败，则设置重试
-        if (platform === '抖音' && streamMethod === '直播伴侣') {
+        // 如果是抖音平台且获取失败，则设置重试
+        if (platform === '抖音') {
+          // 只在控制台记录错误，不在UI上显示
           console.log(`获取推流信息失败: ${err.message}，2秒后重试...`);
-          setError(`获取推流信息中: ${err.message}，正在重试...`);
+          // 不设置错误消息，保持UI干净
+          setError(null);
 
           // 如果控制器已经被中止，则不再重试
           if (controller.signal.aborted) {
@@ -431,6 +588,17 @@ const HomePage = () => {
         } else {
           console.log('成功停止 OBS 推流');
         }
+
+        // 如果是抖音平台，停止定期的ping/anchor请求
+        if (platform === '抖音') {
+          try {
+            console.log('正在停止抖音定期ping/anchor请求...');
+            await window.electron.stopDouyinPingAnchor();
+            console.log('成功停止抖音定期ping/anchor请求');
+          } catch (pingError) {
+            console.error('停止抖音定期ping/anchor请求失败:', pingError);
+          }
+        }
       } catch (error) {
         console.error('停止 OBS 推流失败:', error);
         // 显示错误但继续重置UI状态
@@ -454,6 +622,42 @@ const HomePage = () => {
     if (userData) {
       setIsLoggedIn(true);
       setUserInfo(userData.user);
+    }
+  }, []);
+
+  // 监听安全认证通知
+  useEffect(() => {
+    // 只在Electron环境中添加事件监听
+    if (typeof window !== 'undefined' && window.electron && window.electron.onAuthNotification) {
+      // 添加事件监听器函数
+      const handleAuthNotification = (data) => {
+        console.log('收到安全认证通知:', data);
+        if (data && data.message) {
+          setAuthMessage(data.message);
+          setShowAuthNotification(true);
+        }
+      };
+
+      // 添加IPC事件监听
+      window.electron.onAuthNotification(handleAuthNotification);
+
+      // 同时保留原有的DOM事件监听
+      const handleDomAuthNotification = (event) => {
+        console.log('收到DOM安全认证通知:', event.detail);
+        if (event.detail && event.detail.message) {
+          setAuthMessage(event.detail.message);
+          setShowAuthNotification(true);
+        }
+      };
+
+      // 添加DOM事件监听
+      window.addEventListener('auth-notification', handleDomAuthNotification);
+
+      // 清理函数
+      return () => {
+        window.removeEventListener('auth-notification', handleDomAuthNotification);
+        // 注意：IPC事件监听器在Electron中通常不需要手动移除
+      };
     }
   }, []);
 
@@ -567,6 +771,13 @@ const HomePage = () => {
         onClose={() => setShowLoginModal(false)}
         onWebLogin={handleDouyinWebLogin}
         onCompanionLogin={handleDouyinCompanionLogin}
+      />
+
+      {/* 安全认证通知 */}
+      <AuthNotification
+        message={authMessage}
+        isVisible={showAuthNotification}
+        onClose={() => setShowAuthNotification(false)}
       />
       {/* 上部区域：直播设置 */}
       <div className="flex flex-row gap-3">

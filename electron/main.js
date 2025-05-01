@@ -274,14 +274,123 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-douyin-api-info', async (event, { token, method }) => {
     try {
-      // 在实际应用中，这里应该调用抖音 API 获取推流信息
       console.log(`Getting Douyin API info for method: ${method} with token: ${token ? token.substring(0, 5) + '...' : 'none'}`);
 
-      // 模拟推流信息
-      return {
-        streamUrl: 'rtmp://push.douyin.com/live',
-        streamKey: `mock_douyin_${method}_key_` + Date.now()
-      };
+      // 导入douyin_rtmp_api模块
+      try {
+        const { main: douyinRtmpApi } = await import('./modules/douyin_rtmp_api.js');
+
+        // 根据方法选择模式
+        // 手机开播对应phone模式，自动开播对应auto模式
+        const mode = method === 'create' ? 'auto' : 'phone';
+        console.log(`Using mode: ${mode} for method: ${method}`);
+
+        // 调用API
+        const result = await douyinRtmpApi(mode, { handleAuth: true });
+
+        console.log('Douyin RTMP API result:', result);
+
+        // 如果是停止直播，则停止ping/anchor请求
+        if (method === 'stop') {
+          const { stopPingAnchor } = await import('./modules/douyin_rtmp_api.js');
+          const stopped = stopPingAnchor();
+          console.log('Stopped ping/anchor requests:', stopped);
+          return { success: true, message: '已停止直播状态维持' };
+        }
+
+        // 如果是手动维持直播状态
+        if (method === 'maintain' && token) {
+          try {
+            const { startPingAnchor } = await import('./modules/douyin_rtmp_api.js');
+            const { roomId, streamId, mode } = token;
+
+            if (!roomId || !streamId) {
+              return { error: '缺少必要的房间ID或流ID参数' };
+            }
+
+            const started = startPingAnchor(roomId, streamId, mode || 'phone');
+            console.log('Started ping/anchor requests:', started);
+            return {
+              success: true,
+              message: '已开始直播状态维持',
+              roomId,
+              streamId
+            };
+          } catch (error) {
+            console.error('Error starting ping/anchor requests:', error);
+            return { error: `启动直播状态维持失败: ${error.message}` };
+          }
+        }
+
+        // 检查是否需要安全认证
+        if (result.requiresAuth && result.authUrl) {
+          console.log('Security authentication required:', result.authPrompt);
+
+          // 打开认证URL
+          try {
+            console.log('Opening authentication URL in browser:', result.authUrl);
+            await shell.openExternal(result.authUrl);
+
+            // 向渲染进程发送通知消息
+            if (mainWindow) {
+              mainWindow.webContents.send('auth-notification', { message: result.authPrompt });
+            }
+          } catch (error) {
+            console.error('Failed to open authentication URL:', error);
+          }
+
+          return {
+            requiresAuth: true,
+            authUrl: result.authUrl,
+            authPrompt: result.authPrompt
+          };
+        }
+
+        // 检查是否需要重试（手机开播模式下，状态不为2）
+        if (result.needsRetry) {
+          console.log(`Stream not ready yet. Current status: ${result.currentStatus}, expected: ${result.expectedStatus}`);
+          return {
+            needsRetry: true,
+            currentStatus: result.currentStatus,
+            expectedStatus: result.expectedStatus,
+            roomId: result.room_id,
+            streamId: result.stream_id,
+            error: result.error || '直播间未准备好，请等待或重试'
+          };
+        }
+
+        // 检查是否有错误
+        if (result.error) {
+          console.error('Douyin API error:', result.error);
+          return { error: result.error };
+        }
+
+        // 检查是否有RTMP URL
+        if (result.rtmpUrl) {
+          // 拆分RTMP URL为推流地址和推流密钥
+          const lastSlashIndex = result.rtmpUrl.lastIndexOf('/');
+
+          if (lastSlashIndex !== -1 && lastSlashIndex < result.rtmpUrl.length - 1) {
+            const streamUrl = result.rtmpUrl.substring(0, lastSlashIndex);
+            const streamKey = result.rtmpUrl.substring(lastSlashIndex + 1);
+
+            console.log(`已拆分RTMP URL - 推流地址: ${streamUrl}, 推流密钥: ${streamKey ? '******' : 'none'}`);
+
+            return {
+              streamUrl,
+              streamKey,
+              roomId: result.roomId,
+              streamId: result.streamId
+            };
+          }
+        }
+
+        // 如果没有找到RTMP URL
+        return { error: '未找到有效的推流地址' };
+      } catch (error) {
+        console.error('Error importing or running douyin_rtmp_api:', error);
+        return { error: `API模块错误: ${error.message}` };
+      }
     } catch (error) {
       console.error('Failed to get Douyin API info:', error);
       return { error: error.message };
@@ -309,6 +418,34 @@ app.whenReady().then(() => {
 
   // 抖音直播伴侣登录 - 使用模块化实现
   ipcMain.handle('login-douyin-companion', loginDouyinCompanion);
+
+  // 安全认证相关功能
+  ipcMain.handle('open-auth-url', async (event, { url }) => {
+    try {
+      console.log('Opening authentication URL in browser:', url);
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to open authentication URL:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('show-auth-notification', async (event, { message }) => {
+    try {
+      console.log('Showing authentication notification:', message);
+
+      // 如果主窗口存在，向渲染进程发送通知消息
+      if (mainWindow) {
+        mainWindow.webContents.send('auth-notification', { message });
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to show authentication notification:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   ipcMain.handle('login-bilibili', async () => {
     try {

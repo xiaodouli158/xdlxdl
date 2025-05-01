@@ -20,10 +20,24 @@ contextBridge.exposeInMainWorld('electron', {
   // 直播平台相关功能
   getDouyinCompanionInfo: () => ipcRenderer.invoke('get-douyin-companion-info'),
   getDouyinApiInfo: (token, method) => ipcRenderer.invoke('get-douyin-api-info', { token, method }),
+  stopDouyinPingAnchor: () => ipcRenderer.invoke('get-douyin-api-info', { token: null, method: 'stop' }),
+  maintainDouyinStream: (roomId, streamId, mode) => ipcRenderer.invoke('get-douyin-api-info', {
+    token: { roomId, streamId, mode },
+    method: 'maintain'
+  }),
   getBilibiliStreamInfo: (token) => ipcRenderer.invoke('get-bilibili-stream-info', { token }),
 
   // 认证相关功能
   loginDouyinWeb: () => ipcRenderer.invoke('login-douyin-web'),
   loginDouyinCompanion: () => ipcRenderer.invoke('login-douyin-companion'),
   loginBilibili: () => ipcRenderer.invoke('login-bilibili'),
+
+  // 安全认证相关功能
+  openAuthUrl: (url) => ipcRenderer.invoke('open-auth-url', { url }),
+  showAuthNotification: (message) => ipcRenderer.invoke('show-auth-notification', { message }),
+
+  // 事件监听
+  onAuthNotification: (callback) => {
+    ipcRenderer.on('auth-notification', (event, data) => callback(data));
+  },
 });
