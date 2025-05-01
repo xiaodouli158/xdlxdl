@@ -199,7 +199,18 @@ app.whenReady().then(() => {
   // 直播平台相关功能
   ipcMain.handle('get-douyin-companion-info', async () => {
     try {
-      // 从直播伴侣的roomStore.json文件中获取推流信息
+      // 先检查MediaSDK_Server.exe进程是否正在运行
+      console.log('检查MediaSDK_Server.exe进程是否正在运行...');
+      const isRunning = await checkMediaSDKServerRunning();
+
+      if (!isRunning) {
+        console.log('MediaSDK_Server.exe进程未运行，无法获取推流信息');
+        return { error: 'MediaSDK_Server.exe进程未运行，请确保直播伴侣已正确启动' };
+      }
+
+      console.log('检测到MediaSDK_Server.exe进程正在运行');
+
+      // 只有当MediaSDK_Server.exe进程正在运行时，才从roomStore.json获取推流信息
       console.log('Getting Douyin companion info from roomStore.json');
 
       // 定义roomStore.json文件路径
