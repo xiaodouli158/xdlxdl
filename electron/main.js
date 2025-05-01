@@ -10,6 +10,7 @@ import { getSoftwareVersion, getSoftwarePath } from '../src/utils/Findsoftpaths.
 import { loginDouyinWeb } from './modules/douyinWebLogin.js';
 import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
 import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
+import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
 
 // 将回调函数转换为 Promise
 const execAsync = promisify(exec);
@@ -217,6 +218,20 @@ app.whenReady().then(() => {
 
       console.log('检测到MediaSDK_Server.exe进程正在运行');
 
+      // 执行keyboard_shortcut.js中的快捷键，直播伴侣开播
+      try {
+        console.log('正在执行Ctrl+Shift+L快捷键...');
+        executeCtrlShiftL()
+          .then(() => {
+            console.log('快捷键执行成功');
+          })
+          .catch((error) => {
+            console.error('快捷键执行失败:', error);
+          });
+      } catch (error) {
+        console.error('执行快捷键时出错:', error);
+      }
+
       // 只有当MediaSDK_Server.exe进程正在运行时，才从roomStore.json获取推流信息
       console.log('Getting Douyin companion info from roomStore.json');
 
@@ -239,6 +254,29 @@ app.whenReady().then(() => {
 
           // 打印roomStore的顶层结构，帮助调试
           console.log('roomStore顶层结构:', Object.keys(roomStore));
+
+          // 首先检查status是否为2
+          let status = null;
+
+          // 检查status的位置
+          if (roomStore.status !== undefined) {
+            status = roomStore.status;
+            console.log('在顶层找到status:', status);
+          } else if (roomStore.roomStore && roomStore.roomStore.status !== undefined) {
+            status = roomStore.roomStore.status;
+            console.log('在roomStore.roomStore中找到status:', status);
+          }
+
+          // 如果status不是2，返回错误
+          if (status !== 2) {
+            console.log(`直播间状态不是2，当前状态: ${status}`);
+            return {
+              error: `直播间未准备好，当前状态: ${status}，需要状态为2才能获取推流地址`,
+              status: status
+            };
+          }
+
+          console.log('直播间状态为2，可以获取推流地址');
 
           // 尝试查找rtmp_push_url的位置
           let rtmpPushUrl = null;
@@ -313,13 +351,15 @@ app.whenReady().then(() => {
 
               return {
                 streamUrl,
-                streamKey
+                streamKey,
+                status: status
               };
             } else {
               console.error('无法拆分RTMP URL:', rtmpPushUrl);
               return {
                 streamUrl: rtmpPushUrl,
-                streamKey: ''
+                streamKey: '',
+                status: status
               };
             }
           } else {
@@ -583,6 +623,24 @@ app.whenReady().then(() => {
       return {
         success: false,
         message: '杀死 MediaSDK_Server.exe 进程失败: ' + error.message
+      };
+    }
+  });
+
+  // 执行Ctrl+Shift+L快捷键
+  ipcMain.handle('execute-keyboard-shortcut', async () => {
+    try {
+      console.log('正在执行Ctrl+Shift+L快捷键...');
+      await executeCtrlShiftL();
+      return {
+        success: true,
+        message: '快捷键执行成功'
+      };
+    } catch (error) {
+      console.error('执行快捷键失败:', error);
+      return {
+        success: false,
+        message: '执行快捷键失败: ' + error.message
       };
     }
   });
