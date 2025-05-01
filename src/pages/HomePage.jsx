@@ -3,7 +3,8 @@ import { User, Check, AlertCircle, Link, Key, Copy } from 'lucide-react';
 import LoginModal from '../components/LoginModal';
 import AuthNotification from '../components/AuthNotification';
 import { useNavigate } from 'react-router-dom';
-import { loginWithDouyinWeb, loginWithDouyinCompanion, loadDouyinUserData, clearDouyinUserData } from '../utils/douyinLoginUtils';
+import { loginWithDouyinWeb, loginWithDouyinCompanion } from '../utils/douyinLoginUtils';
+import { loadPlatformUserData, clearPlatformUserData } from '../utils/platformLoginUtils';
 // import { useStreaming } from '../context/StreamingContext';
 // import { workspaceStreamInfo, configureAndStartOBS } from '../utils/obsUtils';
 
@@ -135,6 +136,17 @@ const HomePage = () => {
     setPlatform(newPlatform);
     // 保存到本地存储
     localStorage.setItem('selectedPlatform', newPlatform);
+
+    // 根据新选择的平台加载用户信息
+    const platformUserData = loadPlatformUserData(newPlatform);
+    if (platformUserData) {
+      setIsLoggedIn(true);
+      setUserInfo(platformUserData.user);
+    } else {
+      // 如果没有找到该平台的用户信息，则设置为未登录状态
+      setIsLoggedIn(false);
+      setUserInfo(null);
+    }
   };
 
   const handleMethodChange = (newMethod) => {
@@ -631,13 +643,16 @@ const HomePage = () => {
 
   // 检查是否已登录
   useEffect(() => {
-    // 从本地存储中加载用户数据
-    const userData = loadDouyinUserData();
+    // 根据当前选择的平台从本地存储中加载用户数据
+    const userData = loadPlatformUserData(platform);
     if (userData) {
       setIsLoggedIn(true);
       setUserInfo(userData.user);
+    } else {
+      setIsLoggedIn(false);
+      setUserInfo(null);
     }
-  }, []);
+  }, [platform]); // 当平台变化时重新加载用户信息
 
   // 监听安全认证通知
   useEffect(() => {
@@ -674,6 +689,19 @@ const HomePage = () => {
       };
     }
   }, []);
+
+  // 初始化时根据当前选择的平台加载用户信息
+  useEffect(() => {
+    // 根据当前选择的平台从本地存储中加载用户数据
+    const userData = loadPlatformUserData(platform);
+    if (userData) {
+      setIsLoggedIn(true);
+      setUserInfo(userData.user);
+    } else {
+      setIsLoggedIn(false);
+      setUserInfo(null);
+    }
+  }, [platform]); // 当平台变化时重新加载用户信息
 
   // 抖音网页登录
   const handleDouyinWebLogin = async () => {
@@ -737,7 +765,8 @@ const HomePage = () => {
 
   // 退出登录
   const logout = () => {
-    clearDouyinUserData();
+    // 根据当前选择的平台清除用户数据
+    clearPlatformUserData(platform);
     setIsLoggedIn(false);
     setUserInfo(null);
   };
