@@ -39,9 +39,6 @@ contextBridge.exposeInMainWorld('electron', {
   // 进程管理相关功能
   killMediaSDKServer: () => ipcRenderer.invoke('kill-mediasdk-server'),
 
-  // 快捷键相关功能
-  executeKeyboardShortcut: () => ipcRenderer.invoke('execute-keyboard-shortcut'),
-
   // 事件监听
   onAuthNotification: (callback) => {
     ipcRenderer.on('auth-notification', (event, data) => callback(data));

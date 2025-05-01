@@ -212,8 +212,36 @@ app.whenReady().then(() => {
       const isRunning = await checkMediaSDKServerRunning();
 
       if (!isRunning) {
-        console.log('MediaSDK_Server.exe进程未运行，无法获取推流信息');
-        return { error: 'MediaSDK_Server.exe进程未运行，请确保直播伴侣已正确启动' };
+        console.log('MediaSDK_Server.exe进程未运行，尝试启动直播伴侣...');
+
+        try {
+          // 调用loginDouyinCompanion启动直播伴侣
+          console.log('正在启动直播伴侣...');
+          const loginResult = await loginDouyinCompanion();
+
+          if (!loginResult.success) {
+            console.error('启动直播伴侣失败:', loginResult.error);
+            return { error: `启动直播伴侣失败: ${loginResult.error}` };
+          }
+
+          console.log('直播伴侣启动成功，等待MediaSDK_Server.exe进程启动...');
+
+          // 等待5秒，让直播伴侣有时间启动MediaSDK_Server.exe进程
+          await new Promise(resolve => setTimeout(resolve, 10000));
+
+          // 再次检查MediaSDK_Server.exe进程是否已启动
+          const isRunningAfterStart = await checkMediaSDKServerRunning();
+
+          if (!isRunningAfterStart) {
+            console.error('启动直播伴侣后，MediaSDK_Server.exe进程仍未运行');
+            return { error: '启动直播伴侣后，MediaSDK_Server.exe进程仍未运行，请手动启动直播伴侣' };
+          }
+
+          console.log('成功启动直播伴侣并检测到MediaSDK_Server.exe进程');
+        } catch (startError) {
+          console.error('启动直播伴侣时出错:', startError);
+          return { error: `启动直播伴侣时出错: ${startError.message}` };
+        }
       }
 
       console.log('检测到MediaSDK_Server.exe进程正在运行');
@@ -627,23 +655,6 @@ app.whenReady().then(() => {
     }
   });
 
-  // 执行Ctrl+Shift+L快捷键
-  ipcMain.handle('execute-keyboard-shortcut', async () => {
-    try {
-      console.log('正在执行Ctrl+Shift+L快捷键...');
-      await executeCtrlShiftL();
-      return {
-        success: true,
-        message: '快捷键执行成功'
-      };
-    } catch (error) {
-      console.error('执行快捷键失败:', error);
-      return {
-        success: false,
-        message: '执行快捷键失败: ' + error.message
-      };
-    }
-  });
 
   ipcMain.handle('login-bilibili', async () => {
     try {
