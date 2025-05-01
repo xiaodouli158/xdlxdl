@@ -227,7 +227,7 @@ app.whenReady().then(() => {
           console.log('直播伴侣启动成功，等待MediaSDK_Server.exe进程启动...');
 
           // 等待5秒，让直播伴侣有时间启动MediaSDK_Server.exe进程
-          await new Promise(resolve => setTimeout(resolve, 10000));
+          await new Promise(resolve => setTimeout(resolve, 15000));
 
           // 再次检查MediaSDK_Server.exe进程是否已启动
           const isRunningAfterStart = await checkMediaSDKServerRunning();
