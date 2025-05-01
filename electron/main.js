@@ -17,6 +17,57 @@ const fsAccess = promisify(fs.access);
 const fsReadFile = promisify(fs.readFile);
 const fsWriteFile = promisify(fs.writeFile);
 
+/**
+ * 检查MediaSDK_Server.exe进程是否正在运行
+ * @returns {Promise<boolean>} 进程是否正在运行
+ */
+async function checkMediaSDKServerRunning() {
+  try {
+    // 在 Windows 上使用 tasklist 命令检查进程是否运行
+    const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq MediaSDK_Server.exe" /NH');
+
+    // 如果输出中包含 MediaSDK_Server.exe，则进程正在运行
+    return stdout.includes('MediaSDK_Server.exe');
+  } catch (error) {
+    console.error('检查 MediaSDK_Server.exe 是否运行时出错:', error);
+    return false;
+  }
+}
+
+/**
+ * 杀死 MediaSDK_Server.exe 进程
+ * @returns {Promise<{success: boolean, message: string}>} 操作结果
+ */
+async function killMediaSDKServer() {
+  try {
+    // 检查进程是否正在运行
+    const isRunning = await checkMediaSDKServerRunning();
+
+    if (!isRunning) {
+      return {
+        success: true,
+        message: 'MediaSDK_Server.exe 进程未运行'
+      };
+    }
+
+    // 在 Windows 上使用 taskkill 命令强制结束进程
+    await execAsync('taskkill /F /IM MediaSDK_Server.exe');
+
+    console.log('成功杀死 MediaSDK_Server.exe 进程');
+
+    return {
+      success: true,
+      message: '成功杀死 MediaSDK_Server.exe 进程'
+    };
+  } catch (error) {
+    console.error('杀死 MediaSDK_Server.exe 进程时出错:', error);
+    return {
+      success: false,
+      message: '杀死 MediaSDK_Server.exe 进程时出错: ' + error.message
+    };
+  }
+}
+
 // 获取__dirname等价物
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -444,6 +495,20 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Failed to show authentication notification:', error);
       return { success: false, error: error.message };
+    }
+  });
+
+  // MediaSDK_Server.exe 进程管理
+  ipcMain.handle('kill-mediasdk-server', async () => {
+    try {
+      console.log('正在尝试杀死 MediaSDK_Server.exe 进程...');
+      return await killMediaSDKServer();
+    } catch (error) {
+      console.error('杀死 MediaSDK_Server.exe 进程失败:', error);
+      return {
+        success: false,
+        message: '杀死 MediaSDK_Server.exe 进程失败: ' + error.message
+      };
     }
   });
 

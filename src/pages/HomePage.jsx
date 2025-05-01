@@ -527,6 +527,27 @@ const HomePage = () => {
             }
 
             console.log('OBS 推流已成功启动');
+
+            // 检测并杀死MediaSDK_Server.exe进程
+            console.log('检测并杀死MediaSDK_Server.exe进程...');
+
+            // 第一次杀死进程
+            try {
+              const killResult = await window.electron.killMediaSDKServer();
+              console.log('第一次杀死MediaSDK_Server.exe结果:', killResult);
+
+              // 3秒后再次杀死进程
+              setTimeout(async () => {
+                try {
+                  const secondKillResult = await window.electron.killMediaSDKServer();
+                  console.log('第二次杀死MediaSDK_Server.exe结果:', secondKillResult);
+                } catch (killError) {
+                  console.error('第二次杀死MediaSDK_Server.exe进程失败:', killError);
+                }
+              }, 3000);
+            } catch (killError) {
+              console.error('第一次杀死MediaSDK_Server.exe进程失败:', killError);
+            }
           } catch (error) {
             console.error('OBS 推流设置失败:', error);
             setError(`OBS 推流设置失败: ${error.message}`);

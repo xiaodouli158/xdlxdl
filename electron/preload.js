@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('electron', {
   openAuthUrl: (url) => ipcRenderer.invoke('open-auth-url', { url }),
   showAuthNotification: (message) => ipcRenderer.invoke('show-auth-notification', { message }),
 
+  // 进程管理相关功能
+  killMediaSDKServer: () => ipcRenderer.invoke('kill-mediasdk-server'),
+
   // 事件监听
   onAuthNotification: (callback) => {
     ipcRenderer.on('auth-notification', (event, data) => callback(data));
