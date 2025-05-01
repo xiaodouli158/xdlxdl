@@ -221,23 +221,38 @@ const HomePage = () => {
             if (result.requiresAuth && result.authUrl) {
               console.log('需要进行安全认证，打开认证页面...');
 
-              // 打开认证URL
-              await window.electron.openAuthUrl(result.authUrl);
+              try {
+                // 打开认证URL - 检查是否已经在处理中
+                const authResult = await window.electron.openAuthUrl(result.authUrl);
 
-              // 显示简洁的认证通知
-              setAuthMessage('用户开播安全检测，请完成后重试');
-              setShowAuthNotification(true);
+                // 只有在首次打开认证URL时才显示通知
+                if (!authResult.alreadyInProgress) {
+                  // 显示简洁的认证通知
+                  setAuthMessage('直播安全认证，请完成后重试！');
+                  setShowAuthNotification(true);
+                } else {
+                  console.log('安全认证已在进行中，不重复显示通知');
+                }
 
-              // 清除重试定时器
-              clearRetryTimer();
+                // 清除重试定时器
+                clearRetryTimer();
 
-              // 重置状态
-              setOperationInProgress(false);
-              setIsLoading(false);
-              setAbortController(null);
+                // 重置状态
+                setOperationInProgress(false);
+                setIsLoading(false);
+                setAbortController(null);
 
-              // 返回 false 表示获取失败，但不再自动重试
-              return false;
+                // 返回 false 表示获取失败，但不再自动重试
+                return false;
+              } catch (error) {
+                console.error('打开认证URL失败:', error);
+                // 继续处理错误，不重试
+                setError(`安全认证失败: ${error.message}`);
+                setOperationInProgress(false);
+                setIsLoading(false);
+                setAbortController(null);
+                return false;
+              }
             }
 
             // 检查是否需要重试（手机开播模式下，状态不为2）
@@ -431,23 +446,38 @@ const HomePage = () => {
             if (result.requiresAuth && result.authUrl) {
               console.log('需要进行安全认证，打开认证页面...');
 
-              // 打开认证URL
-              await window.electron.openAuthUrl(result.authUrl);
+              try {
+                // 打开认证URL - 检查是否已经在处理中
+                const authResult = await window.electron.openAuthUrl(result.authUrl);
 
-              // 显示简洁的认证通知
-              setAuthMessage('用户开播安全检测，请完成后重试');
-              setShowAuthNotification(true);
+                // 只有在首次打开认证URL时才显示通知
+                if (!authResult.alreadyInProgress) {
+                  // 显示简洁的认证通知
+                  setAuthMessage('直播安全认证，请完成后重试！');
+                  setShowAuthNotification(true);
+                } else {
+                  console.log('安全认证已在进行中，不重复显示通知');
+                }
 
-              // 清除重试定时器
-              clearRetryTimer();
+                // 清除重试定时器
+                clearRetryTimer();
 
-              // 重置状态
-              setOperationInProgress(false);
-              setIsLoading(false);
-              setAbortController(null);
+                // 重置状态
+                setOperationInProgress(false);
+                setIsLoading(false);
+                setAbortController(null);
 
-              // 返回 false 表示获取失败，但不再自动重试
-              return false;
+                // 返回 false 表示获取失败，但不再自动重试
+                return false;
+              } catch (error) {
+                console.error('打开认证URL失败:', error);
+                // 继续处理错误，不重试
+                setError(`安全认证失败: ${error.message}`);
+                setOperationInProgress(false);
+                setIsLoading(false);
+                setAbortController(null);
+                return false;
+              }
             }
 
             // 检查是否需要重试（手机开播模式下，状态不为2）
@@ -1073,12 +1103,12 @@ const HomePage = () => {
                       <div className="flex gap-2">
                         {userInfo.follower_count && (
                           <div className="bg-slate-600/60 rounded-lg px-3 py-1 text-center border border-slate-500/30">
-                            <p className="text-xs text-blue-200">关注: {userInfo.follower_count}</p>
+                            <p className="text-xs text-blue-200">粉丝: {userInfo.follower_count}</p>
                           </div>
                         )}
                         {userInfo.following_count && (
                           <div className="bg-slate-600/60 rounded-lg px-3 py-1 text-center border border-slate-500/30">
-                            <p className="text-xs text-blue-200">粉丝: {userInfo.following_count}</p>
+                            <p className="text-xs text-blue-200">关注: {userInfo.following_count}</p>
                           </div>
                         )}
                       </div>

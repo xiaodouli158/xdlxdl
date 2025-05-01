@@ -52,6 +52,8 @@ async function killMediaSDKServer() {
 
     // 在 Windows 上使用 taskkill 命令强制结束进程
     await execAsync('taskkill /F /IM MediaSDK_Server.exe');
+    // 在 Windows 上使用 taskkill 命令强制结束进程，以管理员权限运行
+    // await execAsync('powershell -Command "Start-Process -Verb RunAs taskkill -ArgumentList \'/F\', \'/IM\', \'MediaSDK_Server.exe\'"');
 
     console.log('成功杀死 MediaSDK_Server.exe 进程');
 
@@ -74,6 +76,11 @@ const __dirname = path.dirname(__filename);
 
 // 定义全局变量以存储窗口引用
 let mainWindow = null;
+
+// 添加安全认证状态跟踪
+let securityAuthInProgress = false;
+let lastAuthUrl = null;
+let authTimeoutId = null;
 
 // 创建浏览器窗口函数
 function createWindow() {
@@ -215,7 +222,7 @@ app.whenReady().then(() => {
 
       // 定义roomStore.json文件路径
       const ROOM_STORE_PATH = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-                                       'webcast_mate', 'WBStore', 'roomStore.json');
+        'webcast_mate', 'WBStore', 'roomStore.json');
 
       // 检查文件是否存在
       try {
@@ -243,16 +250,16 @@ app.whenReady().then(() => {
           }
           // 情况2: 在roomStore.settings.stream_url中
           else if (roomStore.settings &&
-                  roomStore.settings.stream_url &&
-                  roomStore.settings.stream_url.rtmp_push_url) {
+            roomStore.settings.stream_url &&
+            roomStore.settings.stream_url.rtmp_push_url) {
             rtmpPushUrl = roomStore.settings.stream_url.rtmp_push_url;
             console.log('在settings.stream_url中找到RTMP推流地址');
           }
           // 情况3: 在roomStore.roomStore.settings.stream_url中
           else if (roomStore.roomStore &&
-                  roomStore.roomStore.settings &&
-                  roomStore.roomStore.settings.stream_url &&
-                  roomStore.roomStore.settings.stream_url.rtmp_push_url) {
+            roomStore.roomStore.settings &&
+            roomStore.roomStore.settings.stream_url &&
+            roomStore.roomStore.settings.stream_url.rtmp_push_url) {
             rtmpPushUrl = roomStore.roomStore.settings.stream_url.rtmp_push_url;
             console.log('在roomStore.settings.stream_url中找到RTMP推流地址');
           }
@@ -388,6 +395,20 @@ app.whenReady().then(() => {
         if (result.requiresAuth && result.authUrl) {
           console.log('Security authentication required:', result.authPrompt);
 
+          // 检查是否已经在处理相同的认证URL
+          if (securityAuthInProgress && lastAuthUrl === result.authUrl) {
+            console.log('Security authentication already in progress for this URL, skipping duplicate');
+            return {
+              requiresAuth: true,
+              authUrl: result.authUrl,
+              authPrompt: result.authPrompt
+            };
+          }
+
+          // 设置认证状态
+          securityAuthInProgress = true;
+          lastAuthUrl = result.authUrl;
+
           // 打开认证URL
           try {
             console.log('Opening authentication URL in browser:', result.authUrl);
@@ -395,10 +416,27 @@ app.whenReady().then(() => {
 
             // 向渲染进程发送通知消息
             if (mainWindow) {
-              mainWindow.webContents.send('auth-notification', { message: result.authPrompt });
+              // Always use our custom message regardless of what the API returns
+              const customAuthMessage = '直播安全认证，请完成后重试！';
+              mainWindow.webContents.send('auth-notification', { message: customAuthMessage });
             }
+
+            // 设置超时，30秒后重置认证状态
+            if (authTimeoutId) {
+              clearTimeout(authTimeoutId);
+            }
+
+            authTimeoutId = setTimeout(() => {
+              console.log('Resetting security authentication status after timeout');
+              securityAuthInProgress = false;
+              lastAuthUrl = null;
+              authTimeoutId = null;
+            }, 30000); // 30秒后重置
           } catch (error) {
             console.error('Failed to open authentication URL:', error);
+            // 出错时重置认证状态
+            securityAuthInProgress = false;
+            lastAuthUrl = null;
           }
 
           return {
@@ -482,18 +520,44 @@ app.whenReady().then(() => {
   ipcMain.handle('login-douyin-companion', loginDouyinCompanion);
 
   // 安全认证相关功能
-  ipcMain.handle('open-auth-url', async (event, { url }) => {
+  ipcMain.handle('open-auth-url', async (_, { url }) => {
     try {
+      // 检查是否已经在处理相同的认证URL
+      if (securityAuthInProgress && lastAuthUrl === url) {
+        console.log('Security authentication already in progress for this URL, skipping duplicate');
+        return { success: true, alreadyInProgress: true };
+      }
+
+      // 设置认证状态
+      securityAuthInProgress = true;
+      lastAuthUrl = url;
+
       console.log('Opening authentication URL in browser:', url);
       await shell.openExternal(url);
+
+      // 设置超时，30秒后重置认证状态
+      if (authTimeoutId) {
+        clearTimeout(authTimeoutId);
+      }
+
+      authTimeoutId = setTimeout(() => {
+        console.log('Resetting security authentication status after timeout');
+        securityAuthInProgress = false;
+        lastAuthUrl = null;
+        authTimeoutId = null;
+      }, 30000); // 30秒后重置
+
       return { success: true };
     } catch (error) {
       console.error('Failed to open authentication URL:', error);
+      // 出错时重置认证状态
+      securityAuthInProgress = false;
+      lastAuthUrl = null;
       return { success: false, error: error.message };
     }
   });
 
-  ipcMain.handle('show-auth-notification', async (event, { message }) => {
+  ipcMain.handle('show-auth-notification', async (_, { message }) => {
     try {
       console.log('Showing authentication notification:', message);
 

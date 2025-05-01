@@ -99,11 +99,13 @@ async function getStreamURL(mode = "phone") {
 
       // Check for security authentication requirement (status_code 4003028)
       if (responseData.status_code === 4003028 && responseData.extra && responseData.extra.web_auth_address) {
-        console.error(`Security authentication required: ${responseData.data?.prompts || '为保障用户安全与功能体验，请完成安全认证'}`);
+        // Always use our custom message regardless of what the API returns
+        const customAuthMessage = '直播安全认证，请完成后重试！';
+        console.error(`Security authentication required: ${customAuthMessage}`);
         return {
           success: false,
           status_code: 4003028,
-          status_msg: responseData.data?.prompts || '为保障用户安全与功能体验，请完成安全认证',
+          status_msg: customAuthMessage, // Use our custom message instead of responseData.data?.prompts
           web_auth_address: responseData.extra.web_auth_address,
           requiresAuth: true
         };
@@ -412,23 +414,16 @@ async function main(mode = "phone", options = { handleAuth: false }) {
     // Get stream URL based on mode
     const streamResult = await getStreamURL(mode);
 
-    // Check if we need to handle authentication (regardless of success status)
-    if (streamResult.status_code === 4003028 && streamResult.web_auth_address && options.handleAuth) {
-      console.log('Security authentication required:', streamResult.status_msg);
+    // Single check for authentication requirement (consolidated)
+    if ((streamResult.status_code === 4003028 || streamResult.requiresAuth) &&
+        streamResult.web_auth_address && options.handleAuth) {
+      // Always use our custom message regardless of what the API returns
+      const customAuthMessage = '直播安全认证，请完成后重试！';
+      console.log('Security authentication required:', customAuthMessage);
       return {
         requiresAuth: true,
         authUrl: streamResult.web_auth_address,
-        authPrompt: streamResult.status_msg || '为保障用户安全与功能体验，请完成安全认证'
-      };
-    }
-
-    // Check for authentication requirement even if success is false
-    if (streamResult.requiresAuth && streamResult.web_auth_address && options.handleAuth) {
-      console.log('Security authentication required (from requiresAuth flag):', streamResult.status_msg);
-      return {
-        requiresAuth: true,
-        authUrl: streamResult.web_auth_address,
-        authPrompt: streamResult.status_msg || '为保障用户安全与功能体验，请完成安全认证'
+        authPrompt: customAuthMessage // Use our custom message instead of streamResult.status_msg
       };
     }
 

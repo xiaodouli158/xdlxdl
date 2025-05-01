@@ -13,32 +13,33 @@ export const createDouyinLiveRoom = async (openAuthUrl, showNotification) => {
     if (!window.electron) {
       throw new Error('Electron API not available');
     }
-    
+
     // Call the API to create a live room
     const result = await window.electron.getDouyinApiInfo(null, 'create');
-    
+
     // Check if authentication is required
     if (result.requiresAuth && result.authUrl) {
       console.log('Security authentication required for creating live room');
-      
+
       // Open authentication URL
       if (openAuthUrl) {
         await openAuthUrl(result.authUrl);
       }
-      
+
       // Show notification
       if (showNotification) {
-        const message = result.authPrompt || '为保障用户安全与功能体验，请完成安全认证';
+        // Always use our custom message regardless of what the API returns
+        const message = '直播安全认证，请完成后重试！';
         showNotification(message);
       }
-      
+
       return {
         success: false,
         requiresAuth: true,
         message: '需要完成安全认证'
       };
     }
-    
+
     // Check if we got a valid RTMP URL
     if (result.streamUrl && result.streamKey) {
       return {
@@ -47,7 +48,7 @@ export const createDouyinLiveRoom = async (openAuthUrl, showNotification) => {
         streamKey: result.streamKey
       };
     }
-    
+
     // If we got here, something went wrong
     return {
       success: false,
@@ -71,10 +72,10 @@ export const getLatestRoomInfo = async () => {
     if (!window.electron) {
       throw new Error('Electron API not available');
     }
-    
+
     // Call the API to get the latest room info
     const result = await window.electron.getDouyinApiInfo(null, 'get');
-    
+
     // Check if we got a valid RTMP URL
     if (result.streamUrl && result.streamKey) {
       return {
@@ -83,7 +84,7 @@ export const getLatestRoomInfo = async () => {
         streamKey: result.streamKey
       };
     }
-    
+
     // If we got here, something went wrong
     return {
       success: false,
