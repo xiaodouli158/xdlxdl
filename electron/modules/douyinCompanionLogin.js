@@ -2,6 +2,7 @@
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { promisify } from 'util';
 import { getSoftwareVersion, getSoftwarePath } from '../../src/utils/Findsoftpaths.js';
 import { getDouyinCookies } from './getDouyinCompanion_cookies.js';
@@ -26,8 +27,9 @@ async function saveCookiesToFile(cookies, cookieString) {
 }
 
 // 直播伴侣数据文件路径
-const USER_STORE_PATH = pathManager.getPath(PathType.USER_STORE);
-const HOTKEY_STORE_PATH = pathManager.getPath(PathType.HOTKEY_STORE);
+const APPDATA = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+const USER_STORE_PATH = path.join(APPDATA, 'webcast_mate', 'WBStore', 'userStore.json');
+const HOTKEY_STORE_PATH = path.join(APPDATA, 'webcast_mate', 'WBStore', 'hotkeyStore.json');
 
 /**
  * 配置直播伴侣的快捷键设置

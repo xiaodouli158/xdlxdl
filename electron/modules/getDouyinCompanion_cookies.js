@@ -21,11 +21,12 @@ try {
 }
 
 // 支持多种可能的浏览器路径
+const userProfile = process.env.USERPROFILE || process.env.HOME;
 const possibleBrowserPaths = [
     // webcast_mate路径
     {
-        cookies: pathManager.getPath(PathType.COOKIES),
-        localState: pathManager.getPath(PathType.LOCAL_STATE)
+        cookies: path.join(userProfile, "AppData", "Roaming", "webcast_mate", "Network", "Cookies"),
+        localState: path.join(userProfile, "AppData", "Roaming", "webcast_mate", "Local State")
     }
     // 如需启用其他浏览器路径，请取消下面的注释
     // // Chrome路径

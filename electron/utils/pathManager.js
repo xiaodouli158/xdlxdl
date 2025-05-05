@@ -1,6 +1,6 @@
 /**
  * Path Manager - Centralized path management for the application
- * 
+ *
  * This module provides standardized access to application paths using Electron's
  * app.getPath() API to ensure consistent path handling across different platforms
  * and installation locations.
@@ -23,22 +23,14 @@ const fsMkdir = promisify(fs.mkdir);
 export const PathType = {
   // User data paths (stored in standard user data directory)
   USER_DATA: 'userData',           // Base user data directory
-  COOKIES: 'cookies',              // Browser cookies
-  LOCAL_STATE: 'localState',       // Browser local state
   WEBSTORE: 'webstore',            // Web store directory
-  USER_STORE: 'userStore',         // User store file
-  ROOM_STORE: 'roomStore',         // Room store file
-  HOTKEY_STORE: 'hotkeyStore',     // Hotkey configuration
   DOUYIN_COOKIES: 'douyinCookies', // Douyin cookies file
-  
+
   // Application paths (relative to the application directory)
   APP_DATA: 'appData',             // Application data directory
   MODULES: 'modules',              // Modules directory
   TEMP: 'temp',                    // Temporary files
   LOGS: 'logs',                    // Log files
-  
-  // External application paths
-  OBS_CONFIG: 'obsConfig',         // OBS WebSocket configuration
 };
 
 /**
@@ -52,41 +44,41 @@ export function getPath(pathType) {
   const appPath = app.getAppPath();
   const tempPath = app.getPath('temp');
   const logsPath = app.getPath('logs');
-  
+
   // Web store directory within user data
   const webStoreDir = path.join(userData, 'WBStore');
-  
-  // Network directory within user data
-  const networkDir = path.join(userData, 'Network');
-  
+
   // Modules directory within app
-  const modulesDir = path.join(appPath, 'electron', 'modules');
-  
+  // 在开发环境和生产环境中，modulesDir 的路径可能不同
+  // 在开发环境中，它是 app.getAppPath() + '/electron/modules'
+  // 在生产环境中，它是 app.getAppPath() + '/resources/app/electron/modules' 或类似路径
+  let modulesDir;
+  if (app.isPackaged) {
+    // 生产环境 - 使用相对于可执行文件的路径
+    modulesDir = path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'electron', 'modules');
+  } else {
+    // 开发环境
+    modulesDir = path.join(appPath, 'electron', 'modules');
+  }
+
   // Temporary directory for the app
   const appTempDir = path.join(tempPath, 'webcast_mate');
-  
+
   // Map path types to actual paths
   const pathMap = {
     // User data paths
     [PathType.USER_DATA]: userData,
-    [PathType.COOKIES]: path.join(networkDir, 'Cookies'),
-    [PathType.LOCAL_STATE]: path.join(userData, 'Local State'),
     [PathType.WEBSTORE]: webStoreDir,
-    [PathType.USER_STORE]: path.join(webStoreDir, 'userStore.json'),
-    [PathType.ROOM_STORE]: path.join(webStoreDir, 'roomStore.json'),
-    [PathType.HOTKEY_STORE]: path.join(webStoreDir, 'hotkeyStore.json'),
-    [PathType.DOUYIN_COOKIES]: path.join(modulesDir, 'douyin_cookies.txt'),
-    
+    // 将 DOUYIN_COOKIES 放在用户数据目录中，确保在生产环境中有写入权限
+    [PathType.DOUYIN_COOKIES]: path.join(userData, 'douyin_cookies.txt'),
+
     // Application paths
     [PathType.APP_DATA]: appPath,
     [PathType.MODULES]: modulesDir,
     [PathType.TEMP]: appTempDir,
     [PathType.LOGS]: logsPath,
-    
-    // External application paths
-    [PathType.OBS_CONFIG]: path.join(app.getPath('appData'), 'obs-studio', 'plugin_config', 'obs-websocket', 'config.json'),
   };
-  
+
   return pathMap[pathType] || '';
 }
 
@@ -117,20 +109,33 @@ export async function ensureDir(dirPath) {
  */
 export async function initializePaths() {
   try {
+    // 打印环境信息，便于调试
+    console.log('Application environment:');
+    console.log(`- app.isPackaged: ${app.isPackaged}`);
+    console.log(`- app.getAppPath(): ${app.getAppPath()}`);
+    console.log(`- app.getPath('userData'): ${app.getPath('userData')}`);
+    console.log(`- app.getPath('temp'): ${app.getPath('temp')}`);
+    console.log(`- app.getPath('logs'): ${app.getPath('logs')}`);
+
+    // 打印所有路径，便于调试
+    console.log('Application paths:');
+    for (const type in PathType) {
+      console.log(`- ${type}: ${getPath(PathType[type])}`);
+    }
+
     // Ensure all necessary directories exist
     const dirsToEnsure = [
-      path.dirname(getPath(PathType.COOKIES)),
       getPath(PathType.WEBSTORE),
       getPath(PathType.TEMP),
       getPath(PathType.LOGS),
       path.dirname(getPath(PathType.DOUYIN_COOKIES))
     ];
-    
+
     // Create all directories
     for (const dir of dirsToEnsure) {
       await ensureDir(dir);
     }
-    
+
     console.log('All application directories initialized successfully');
     return true;
   } catch (error) {

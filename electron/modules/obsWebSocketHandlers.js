@@ -2,10 +2,10 @@
 import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
+import os from 'os';
 import { exec } from 'child_process';
 import OBSWebSocket from 'obs-websocket-js';
 import { getSoftwarePath } from '../../src/utils/Findsoftpaths.js';
-import pathManager, { PathType } from '../utils/pathManager.js';
 
 // 将回调函数转换为 Promise
 const fsReadFile = promisify(fs.readFile);
@@ -14,7 +14,10 @@ const fsAccess = promisify(fs.access);
 const execAsync = promisify(exec);
 
 // OBS WebSocket 配置文件路径
-const OBS_WEBSOCKET_CONFIG_PATH = pathManager.getPath(PathType.OBS_CONFIG);
+const OBS_WEBSOCKET_CONFIG_PATH = path.join(
+  process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+  'obs-studio', 'plugin_config', 'obs-websocket', 'config.json'
+);
 
 // OBS WebSocket 实例
 let obsWebSocket = null;
