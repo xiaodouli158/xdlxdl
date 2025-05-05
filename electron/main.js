@@ -4,13 +4,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import { promisify } from 'util';
 import { getSoftwareVersion, getSoftwarePath } from '../src/utils/Findsoftpaths.js';
 import { loginDouyinWeb } from './modules/douyinWebLogin.js';
 import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
 import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
 import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
+import pathManager, { PathType, initializePaths } from './utils/pathManager.js';
 
 // 将回调函数转换为 Promise
 const execAsync = promisify(exec);
@@ -153,7 +153,11 @@ function createWindow() {
 
 
 // 应用准备就绪后创建窗口
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // 初始化应用程序路径
+  console.log('Initializing application paths...');
+  await initializePaths();
+
   createWindow();
 
   // 设置 IPC 事件监听 - 窗口控制
@@ -263,9 +267,8 @@ app.whenReady().then(() => {
       // 只有当MediaSDK_Server.exe进程正在运行时，才从roomStore.json获取推流信息
       console.log('Getting Douyin companion info from roomStore.json');
 
-      // 定义roomStore.json文件路径
-      const ROOM_STORE_PATH = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-        'webcast_mate', 'WBStore', 'roomStore.json');
+      // 获取roomStore.json文件路径
+      const ROOM_STORE_PATH = pathManager.getPath(PathType.ROOM_STORE);
 
       // 检查文件是否存在
       try {

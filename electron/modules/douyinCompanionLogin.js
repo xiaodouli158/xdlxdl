@@ -2,10 +2,10 @@
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { promisify } from 'util';
 import { getSoftwareVersion, getSoftwarePath } from '../../src/utils/Findsoftpaths.js';
 import { getDouyinCookies } from './getDouyinCompanion_cookies.js';
+import pathManager, { PathType } from '../utils/pathManager.js';
 
 // 将回调函数转换为 Promise
 const fsAccess = promisify(fs.access);
@@ -15,7 +15,7 @@ const fsWriteFile = promisify(fs.writeFile);
 // 保存cookies到文件的函数
 async function saveCookiesToFile(cookies, cookieString) {
   try {
-    const outputPath = path.join(__dirname, 'douyin_cookies.txt');
+    const outputPath = pathManager.getPath(PathType.DOUYIN_COOKIES);
     await fsWriteFile(outputPath, cookieString, 'utf8');
     console.log(`已保存 ${cookies.length} 个Cookie到 ${outputPath}`);
     return true;
@@ -26,9 +26,8 @@ async function saveCookiesToFile(cookies, cookieString) {
 }
 
 // 直播伴侣数据文件路径
-const APPDATA = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-const USER_STORE_PATH = path.join(APPDATA, 'webcast_mate', 'WBStore', 'userStore.json');
-const HOTKEY_STORE_PATH = path.join(APPDATA, 'webcast_mate', 'WBStore', 'hotkeyStore.json');
+const USER_STORE_PATH = pathManager.getPath(PathType.USER_STORE);
+const HOTKEY_STORE_PATH = pathManager.getPath(PathType.HOTKEY_STORE);
 
 /**
  * 配置直播伴侣的快捷键设置

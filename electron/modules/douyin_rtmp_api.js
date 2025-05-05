@@ -1,5 +1,6 @@
 import fs from 'fs';
 import axios from 'axios';
+import pathManager, { PathType } from '../utils/pathManager.js';
 
 /**
  * Read cookies from a file
@@ -27,7 +28,7 @@ function readCookiesFromFile(cookieFilePath) {
 async function getStreamURL(mode = "phone") {
   try {
     // Read cookie data
-    const cookieData = readCookiesFromFile('electron/modules/douyin_cookies.txt');
+    const cookieData = readCookiesFromFile(pathManager.getPath(PathType.DOUYIN_COOKIES));
     if (!cookieData) {
       console.error('No cookie data available');
       return {
@@ -179,7 +180,7 @@ async function getStreamURL(mode = "phone") {
 async function webcastStart(roomid, streamid, mode = "phone") {
   try {
     // Read cookie data
-    const cookieData = readCookiesFromFile('electron/modules/douyin_cookies.txt');
+    const cookieData = readCookiesFromFile(pathManager.getPath(PathType.DOUYIN_COOKIES));
     if (!cookieData) {
       console.error('No cookie data available');
       return {

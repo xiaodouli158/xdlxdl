@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import pathManager, { PathType } from '../utils/pathManager.js';
 
 // 获取当前文件的目录路径
 const __filename = fileURLToPath(import.meta.url);
@@ -19,15 +20,12 @@ try {
     process.exit(1);
 }
 
-// 配置路径 - 根据需要修改
-const userProfile = process.env.USERPROFILE || process.env.HOME;
-
 // 支持多种可能的浏览器路径
 const possibleBrowserPaths = [
     // webcast_mate路径
     {
-        cookies: path.join(userProfile, "AppData", "Roaming", "webcast_mate", "Network", "Cookies"),
-        localState: path.join(userProfile, "AppData", "Roaming", "webcast_mate", "Local State")
+        cookies: pathManager.getPath(PathType.COOKIES),
+        localState: pathManager.getPath(PathType.LOCAL_STATE)
     }
     // 如需启用其他浏览器路径，请取消下面的注释
     // // Chrome路径
@@ -43,10 +41,10 @@ const possibleBrowserPaths = [
 ];
 
 // 输出路径
-const outputPath = path.join(__dirname, "douyin_cookies.txt");
+const outputPath = pathManager.getPath(PathType.DOUYIN_COOKIES);
 
 // 创建临时文件路径
-const tempDir = path.join(__dirname, "temp");
+const tempDir = pathManager.getPath(PathType.TEMP);
 const tempCookiesPath = path.join(tempDir, "temp_cookies.db");
 const tempPsScript = path.join(tempDir, "decrypt_key.ps1");
 const tempKeyPath = path.join(tempDir, "master_key.bin");

@@ -3,13 +3,14 @@ import { BrowserWindow, session, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import pathManager, { PathType } from '../utils/pathManager.js';
 
 // 获取当前文件的目录路径
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 定义cookie文件保存路径
-const cookieFilePath = path.join(__dirname, 'douyin_cookies.txt');
+const cookieFilePath = pathManager.getPath(PathType.DOUYIN_COOKIES);
 
 /**
  * 将cookies保存到文件
