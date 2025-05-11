@@ -12,6 +12,7 @@ import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
 import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
 import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
 import { initializePaths } from './utils/pathManager.js';
+import { initUpdateChecker } from '../build/update-checker.js';
 
 // 将回调函数转换为 Promise
 const execAsync = promisify(exec);
@@ -186,6 +187,10 @@ app.whenReady().then(async () => {
   // 初始化应用程序路径
   console.log('Initializing application paths...');
   await initializePaths();
+
+  // 初始化更新检查器
+  console.log('Initializing update checker...');
+  initUpdateChecker();
 
   createWindow();
 
@@ -709,6 +714,21 @@ app.whenReady().then(async () => {
       };
     } catch (error) {
       console.error('Failed to login to Bilibili:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 添加检查更新的IPC处理程序
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      console.log('Manual update check requested from renderer process');
+      // 导入checkForUpdates函数
+      const { checkForUpdates } = await import('../build/update-checker.js');
+      // 强制检查更新（显示对话框）
+      await checkForUpdates(true);
+      return { success: true };
+    } catch (error) {
+      console.error('Error checking for updates:', error);
       return { success: false, error: error.message };
     }
   });

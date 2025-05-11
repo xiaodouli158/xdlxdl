@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('electron', {
   // 进程管理相关功能
   killMediaSDKServer: () => ipcRenderer.invoke('kill-mediasdk-server'),
 
+  // 更新相关功能
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+
   // 事件监听
   onAuthNotification: (callback) => {
     ipcRenderer.on('auth-notification', (event, data) => callback(data));

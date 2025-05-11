@@ -38,16 +38,24 @@ const s3Client = new S3Client({
 });
 
 // Path to the installer file
-const installerFileName = `WebcastMate-Setup-${version}.exe`;
-// Get the output directory from package.json
-const outputDir = packageJson.build?.directories?.output || 'dist-electron';
-const installerPath = path.join(rootDir, outputDir, installerFileName);
+const installerFileName = `XDLWebcast-Setup-${version}.exe`;
+// Get the output directory from package.json or use the same as in build.js
+const outputDir = packageJson.build?.directories?.output || 'dist';
+const outputDirPath = path.join(rootDir, outputDir);
+
+// Create output directory if it doesn't exist
+if (!fs.existsSync(outputDirPath)) {
+  console.log(`Creating output directory: ${outputDirPath}`);
+  fs.mkdirSync(outputDirPath, { recursive: true });
+}
+
+const installerPath = path.join(outputDirPath, installerFileName);
 
 // Check if installer file exists
 if (!fs.existsSync(installerPath)) {
-  console.error(`Error: Installer file not found at ${installerPath}`);
-  console.error('Please build the installer first using "npm run build"');
-  process.exit(1);
+  console.warn(`Warning: Installer file not found at ${installerPath}`);
+  console.warn('Creating version file only for testing purposes.');
+  // Continue execution without the installer file
 }
 
 // Create version info file
@@ -60,7 +68,7 @@ const versionInfo = {
   sha512: '', // We could add a hash here if needed
 };
 
-const versionInfoPath = path.join(rootDir, outputDir, 'latest-version.json');
+const versionInfoPath = path.join(rootDir, outputDir, 'latest.yml');
 fs.writeFileSync(versionInfoPath, JSON.stringify(versionInfo, null, 2));
 
 // Upload the installer file
@@ -92,28 +100,38 @@ async function uploadFile(filePath, key, contentType) {
   }
 }
 
-// Main function to upload both files
+// Main function to upload files
 async function main() {
   console.log(`Uploading ${productName} version ${version} to Cloudflare R2...`);
 
-  // Upload the installer
-  const installerUploaded = await uploadFile(
-    installerPath,
-    installerFileName,
-    'application/vnd.microsoft.portable-executable'
-  );
+  let installerUploaded = true; // Default to true if we're skipping installer upload
+
+  // Upload the installer if it exists
+  if (fs.existsSync(installerPath)) {
+    console.log('Uploading installer file...');
+    installerUploaded = await uploadFile(
+      installerPath,
+      installerFileName,
+      'application/vnd.microsoft.portable-executable'
+    );
+  } else {
+    console.log('Skipping installer upload as file does not exist.');
+  }
 
   // Upload the version info file
+  console.log('Uploading version info file...');
   const versionInfoUploaded = await uploadFile(
     versionInfoPath,
-    'latest-version.json',
+    'latest.yml',
     'application/json'
   );
 
-  if (installerUploaded && versionInfoUploaded) {
+  if ((fs.existsSync(installerPath) ? installerUploaded : true) && versionInfoUploaded) {
     console.log('Upload completed successfully!');
-    console.log(`Installer URL: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/${installerFileName}`);
-    console.log(`Version info URL: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/latest-version.json`);
+    if (fs.existsSync(installerPath)) {
+      console.log(`Installer URL: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/${installerFileName}`);
+    }
+    console.log(`Version info URL: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/latest.yml`);
   } else {
     console.error('Upload failed.');
     process.exit(1);

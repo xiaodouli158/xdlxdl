@@ -15,12 +15,13 @@ import fs from 'fs';
 import path from 'path';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
-import S3 from 'aws-sdk/clients/s3.js';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // No need for __dirname or __filename in ES modules
 
 // Configuration
-const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60 * 24; // Check once per day
+const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60 * 6; // Check every 6 hours
 // Configuration for Cloudflare R2
 const R2_ACCOUNT_ID = '84794ee73142290fa69ac64ae8fc7bee';
 const R2_ACCESS_KEY_ID = '50ff0db943697b84c9386513d45fabb9';
@@ -28,11 +29,12 @@ const R2_SECRET_ACCESS_KEY = '3a33b9b6f3d8bcc1a05aea230d447af20db97f3cbe3776f1ae
 const R2_BUCKET_NAME = 'xiaodouliupdates';
 
 // Initialize S3 client for R2
-const s3Client = new S3({
+const s3Client = new S3Client({
   endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  accessKeyId: R2_ACCESS_KEY_ID,
-  secretAccessKey: R2_SECRET_ACCESS_KEY,
-  signatureVersion: 'v4',
+  credentials: {
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY
+  },
   region: 'auto' // R2 uses 'auto' as the region
 });
 
@@ -84,7 +86,7 @@ function isNewerVersion(current, latest) {
   return false;
 }
 
-// Show update dialog
+// Show update dialog (now just logs the update info and returns true to download)
 async function showUpdateDialog(versionInfo) {
   // 从package.json获取软件的实际版本和产品名称
   let currentVersion = '2.0.0'; // Default version
@@ -115,28 +117,24 @@ async function showUpdateDialog(versionInfo) {
     }
   }
 
-  const { response } = await dialog.showMessageBox({
-    type: 'info',
-    title: `${productName} 更新可用`,
-    message: `新版本 ${versionInfo.version} 已可用`,
-    detail: `您当前的版本是 ${currentVersion}。\n\n是否要下载新版本？`,
-    buttons: ['下载', '稍后'],
-    defaultId: 0,
-    cancelId: 1
-  });
+  // 不显示对话框，直接记录日志并返回true表示应该下载更新
+  console.log(`发现新版本 ${versionInfo.version}，当前版本 ${currentVersion}，正在自动下载更新...`);
 
-  return response === 0;
+  // 直接返回true表示应该下载更新
+  return true;
 }
 
 // Show download progress dialog
 function showProgressDialog(versionInfo) {
   const progressWindow = new BrowserWindow({
-    width: 400,
-    height: 150,
+    width: 500,
+    height: 320,
     resizable: false,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
+    frame: false, // 移除标准窗口框架（包括标题栏和菜单栏）
+    titleBarStyle: 'hidden',
     title: '下载更新',
     webPreferences: {
       nodeIntegration: true,
@@ -145,7 +143,7 @@ function showProgressDialog(versionInfo) {
     show: false
   });
 
-  // Create a simple HTML content for the progress window
+  // Create a more detailed HTML content for the progress window with improved UI
   const progressHtml = `
     <!DOCTYPE html>
     <html>
@@ -153,38 +151,250 @@ function showProgressDialog(versionInfo) {
       <meta charset="UTF-8">
       <title>下载更新</title>
       <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        }
+
         body {
-          font-family: Arial, sans-serif;
-          padding: 20px;
+          padding: 0;
           user-select: none;
+          background-color: #ffffff;
+          color: #333;
+          overflow: hidden;
+          border-radius: 8px;
+          border: 1px solid #e0e0e0;
         }
+
+        .title-bar {
+          background-color: #f8f8f8;
+          padding: 12px 15px;
+          display: flex;
+          align-items: center;
+          border-bottom: 1px solid #e0e0e0;
+        }
+
+        .title-icon {
+          width: 24px;
+          height: 24px;
+          background-color: #0078d7;
+          border-radius: 50%;
+          margin-right: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: bold;
+        }
+
+        .title-text {
+          font-size: 16px;
+          font-weight: 500;
+        }
+
+        .content {
+          padding: 20px;
+        }
+
+        .header {
+          margin-bottom: 20px;
+        }
+
+        .title {
+          font-size: 18px;
+          font-weight: bold;
+          margin-bottom: 8px;
+          color: #0078d7;
+        }
+
+        .subtitle {
+          font-size: 14px;
+          color: #666;
+          margin-bottom: 5px;
+        }
+
         .progress-container {
-          margin-top: 15px;
+          margin: 20px 0;
         }
+
+        .progress-header {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        }
+
+        .progress-label {
+          font-size: 14px;
+          color: #333;
+        }
+
+        .progress-percent {
+          font-size: 14px;
+          font-weight: bold;
+          color: #0078d7;
+        }
+
         progress {
           width: 100%;
-          height: 20px;
+          height: 8px;
+          border-radius: 4px;
+          overflow: hidden;
+          background-color: #f0f0f0;
         }
-        .status {
-          margin-top: 10px;
+
+        progress::-webkit-progress-bar {
+          background-color: #f0f0f0;
+          border-radius: 4px;
+        }
+
+        progress::-webkit-progress-value {
+          background: linear-gradient(to right, #0078d7, #00a1ff);
+          border-radius: 4px;
+          transition: width 0.3s ease;
+        }
+
+        .download-info {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 12px;
           font-size: 14px;
+        }
+
+        .status {
+          color: #555;
+        }
+
+        .speed {
+          color: #0078d7;
+          font-weight: 500;
+        }
+
+        .buttons-container {
+          display: flex;
+          justify-content: center;
+          gap: 15px;
+          margin-top: 25px;
+        }
+
+        .button {
+          padding: 8px 20px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        }
+
+        .button:active {
+          transform: translateY(1px);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .primary-button {
+          background-color: #0078d7;
+          color: white;
+        }
+
+        .secondary-button {
+          background-color: #f0f0f0;
+          color: #333;
+        }
+
+        .button-icon {
+          margin-right: 6px;
+          font-size: 16px;
+        }
+
+        .footer {
+          margin-top: 20px;
+          font-size: 12px;
+          color: #888;
+          text-align: center;
         }
       </style>
     </head>
     <body>
-      <h3>正在下载 ${versionInfo.productName} ${versionInfo.version}</h3>
-      <div class="progress-container">
-        <progress id="progress" value="0" max="100"></progress>
+      <div class="title-bar">
+        <div class="title-icon">↓</div>
+        <div class="title-text">下载更新</div>
       </div>
-      <div class="status" id="status">准备下载...</div>
+
+      <div class="content">
+        <div class="header">
+          <div class="title">正在下载 ${versionInfo.productName} ${versionInfo.version}</div>
+          <div class="subtitle">新版本将在下载完成后自动安装</div>
+        </div>
+
+        <div class="progress-container">
+          <div class="progress-header">
+            <span class="progress-label">下载进度</span>
+            <span class="progress-percent" id="progress-percent">0%</span>
+          </div>
+          <progress id="progress" value="0" max="100"></progress>
+
+          <div class="download-info">
+            <div class="status" id="status">准备下载...</div>
+            <div class="speed" id="speed"></div>
+          </div>
+        </div>
+
+        <div class="buttons-container">
+          <button class="button secondary-button" id="manual-download">
+            <span class="button-icon">📥</span>手动下载
+          </button>
+          <button class="button primary-button" id="visit-website">
+            <span class="button-icon">🌐</span>访问官网
+          </button>
+        </div>
+
+        <div class="footer">
+          如果下载失败，您可以点击上方按钮手动下载或访问官方网站
+        </div>
+      </div>
+
       <script>
-        // This will be called from the main process
+        // Update progress function
         window.updateProgress = function(percent, status) {
+          // Update progress bar
           document.getElementById('progress').value = percent;
+
+          // Update percentage display
+          document.getElementById('progress-percent').textContent = percent + '%';
+
           if (status) {
-            document.getElementById('status').textContent = status;
+            // Extract speed information if present
+            const parts = status.split(' - ');
+            if (parts.length > 1) {
+              document.getElementById('status').textContent = parts[0];
+              document.getElementById('speed').textContent = parts[1];
+            } else {
+              document.getElementById('status').textContent = status;
+              document.getElementById('speed').textContent = '';
+            }
           }
         };
+
+        // Button event listeners
+        document.getElementById('manual-download').addEventListener('click', function() {
+          window.electron.manualDownload();
+        });
+
+        document.getElementById('visit-website').addEventListener('click', function() {
+          window.electron.visitWebsite();
+        });
       </script>
     </body>
     </html>
@@ -199,6 +409,31 @@ function showProgressDialog(versionInfo) {
 
   // 增加最大监听器数量，避免 MaxListenersExceededWarning
   progressWindow.webContents.setMaxListeners(30);
+
+  // 设置窗口始终置顶
+  progressWindow.setAlwaysOnTop(true);
+
+  // 禁用窗口关闭按钮
+  progressWindow.on('close', (event) => {
+    // 阻止窗口关闭
+    event.preventDefault();
+  });
+
+  // 在渲染进程中暴露访问官网和手动下载的功能
+  progressWindow.webContents.on('did-finish-load', () => {
+    progressWindow.webContents.executeJavaScript(`
+      window.electron = {
+        manualDownload: function() {
+          const event = new CustomEvent('manual-download-requested');
+          document.dispatchEvent(event);
+        },
+        visitWebsite: function() {
+          const event = new CustomEvent('visit-website-requested');
+          document.dispatchEvent(event);
+        }
+      };
+    `);
+  });
 
   // Show window when ready
   progressWindow.once('ready-to-show', () => {
@@ -219,15 +454,32 @@ async function downloadUpdate(versionInfo) {
   // Create progress window
   const progressWindow = showProgressDialog(versionInfo);
 
+  // 生成预签名下载URL（在外部定义，以便在事件处理程序中使用）
+  let downloadUrl;
   try {
-    // Generate a presigned URL for the file in the R2 bucket
-    const params = {
+    const command = new GetObjectCommand({
       Bucket: R2_BUCKET_NAME,
-      Key: fileName,
-      Expires: 3600 // URL expires in 1 hour
-    };
+      Key: fileName
+    });
 
-    const downloadUrl = await s3Client.getSignedUrlPromise('getObject', params);
+    downloadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+
+    // 添加手动下载按钮事件监听
+    progressWindow.webContents.executeJavaScript(`
+      document.addEventListener('manual-download-requested', function() {
+        console.log('手动下载请求');
+        require('electron').shell.openExternal('${downloadUrl}');
+      });
+    `);
+
+    // 添加访问官网按钮事件监听
+    progressWindow.webContents.executeJavaScript(`
+      document.addEventListener('visit-website-requested', function() {
+        console.log('访问官网请求');
+        require('electron').shell.openExternal('https://www.xdlwebcast.com');
+      });
+    `);
+
     console.log(`Generated download URL: ${downloadUrl}`);
 
     // Start the download
@@ -244,6 +496,11 @@ async function downloadUpdate(versionInfo) {
     // Create write stream
     const fileStream = createWriteStream(filePath);
 
+    // Variables for speed calculation
+    let lastUpdateTime = Date.now();
+    let lastDownloadedSize = 0;
+    let currentSpeed = 0; // Speed in bytes per second
+
     // Setup progress tracking
     const updateProgress = (chunk) => {
       downloadedSize += chunk.length;
@@ -251,9 +508,27 @@ async function downloadUpdate(versionInfo) {
       const downloaded = (downloadedSize / 1048576).toFixed(2); // Convert to MB
       const total = (totalSize / 1048576).toFixed(2); // Convert to MB
 
+      // Calculate download speed
+      const now = Date.now();
+      const timeDiff = now - lastUpdateTime; // Time difference in milliseconds
+
+      // Update speed every 500ms for smoother display
+      if (timeDiff >= 500) {
+        const bytesDownloadedSinceLastUpdate = downloadedSize - lastDownloadedSize;
+        currentSpeed = (bytesDownloadedSinceLastUpdate / timeDiff) * 1000; // Bytes per second
+
+        // Reset for next calculation
+        lastUpdateTime = now;
+        lastDownloadedSize = downloadedSize;
+      }
+
+      // Format speed for display - always in KB/s as requested
+      const speedInKB = currentSpeed / 1024;
+      const speedText = `${speedInKB.toFixed(1)} KB/s`;
+
       // Update progress in the UI
       progressWindow.webContents.executeJavaScript(
-        `updateProgress(${percent}, "已下载 ${downloaded} MB / ${total} MB")`
+        `updateProgress(${percent}, "已下载 ${downloaded} MB / ${total} MB - ${speedText}")`
       ).catch(err => console.error('Error updating progress:', err));
     };
 
@@ -308,53 +583,74 @@ async function downloadUpdate(versionInfo) {
       }
     }
 
-    // Close the progress window if it's still open
+    // 不关闭进度窗口，而是更新状态信息
     if (!progressWindow.isDestroyed()) {
-      progressWindow.close();
+      // 更新进度窗口状态，显示下载失败信息
+      progressWindow.webContents.executeJavaScript(`
+        document.getElementById('status').textContent = '下载失败，请使用下方按钮手动下载或访问官网';
+        document.getElementById('status').style.color = '#e74c3c';
+        document.getElementById('speed').textContent = '';
+
+        // 突出显示按钮
+        document.getElementById('manual-download').style.animation = 'pulse 1.5s infinite';
+        document.getElementById('manual-download').style.backgroundColor = '#4caf50';
+        document.getElementById('manual-download').style.color = 'white';
+
+        // 添加脉动动画
+        const style = document.createElement('style');
+        style.textContent = \`
+          @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+          }
+        \`;
+        document.head.appendChild(style);
+      `);
+
+      // 确保手动下载按钮使用正确的URL
+      progressWindow.webContents.executeJavaScript(`
+        document.addEventListener('manual-download-requested', function() {
+          console.log('手动下载请求（下载失败后）');
+          require('electron').shell.openExternal('${downloadUrl}');
+        });
+      `);
     }
 
-    // 准备详细的错误信息
-    let errorDetail = `无法下载更新: ${error.message}`;
-    if (error.cause) {
-      errorDetail += `\n\n原因: ${error.cause}`;
-    }
+    console.error('下载更新失败，等待用户手动操作');
 
-    // 添加网络连接提示
-    errorDetail += '\n\n请检查您的网络连接并重试。';
-
-    // Show error dialog
-    await dialog.showMessageBox({
-      type: 'error',
-      title: '下载失败',
-      message: '更新下载失败',
-      detail: errorDetail,
-      buttons: ['确定']
+    // 不返回false，而是返回一个永不解决的Promise，这样应用程序会继续等待用户操作
+    return new Promise(() => {
+      // 这个Promise永远不会解决，所以应用程序会继续等待
+      // 用户可以通过点击手动下载或访问官网按钮来继续
     });
-
-    return false;
   }
 }
 
-// Show installation prompt
+// Automatically install update without showing prompt
 async function showInstallPrompt(filePath) {
-  const { response } = await dialog.showMessageBox({
-    type: 'info',
-    title: '安装更新',
-    message: '更新已下载完成',
-    detail: '更新已下载完成，是否立即安装？\n\n安装过程中应用将会关闭。',
-    buttons: ['立即安装', '稍后安装'],
-    defaultId: 0,
-    cancelId: 1
-  });
+  console.log('更新已下载完成，正在自动安装...');
 
-  if (response === 0) {
+  try {
     // Open the installer
     await shell.openPath(filePath);
 
     // Exit the app after a short delay to allow the installer to start
     setTimeout(() => {
+      console.log('正在退出应用以完成更新安装...');
       app.exit(0);
     }, 1000);
+  } catch (error) {
+    console.error('启动安装程序时出错:', error);
+
+    // 如果自动安装失败，显示一个错误对话框
+    await dialog.showMessageBox({
+      type: 'error',
+      title: '安装更新失败',
+      message: '无法自动安装更新',
+      detail: `启动安装程序时出错: ${error.message}\n\n请手动运行安装程序: ${filePath}`,
+      buttons: ['确定']
+    });
   }
 }
 
@@ -388,19 +684,22 @@ export async function checkForUpdates(force = false) {
     // Fetch latest version info using S3 client
     console.log(`Checking for updates from R2 bucket: ${R2_BUCKET_NAME}`);
 
-    // Get the latest-version.json object from the bucket
-    const params = {
+    // Get the latest.yml object from the bucket
+    const command = new GetObjectCommand({
       Bucket: R2_BUCKET_NAME,
-      Key: 'latest-version.json'
-    };
+      Key: 'latest.yml'
+    });
 
-    const data = await s3Client.getObject(params).promise();
-    if (!data || !data.Body) {
+    const response = await s3Client.send(command);
+    if (!response || !response.Body) {
       throw new Error('Failed to fetch version info: No data returned');
     }
 
+    // Convert the readable stream to a string
+    const bodyContents = await response.Body.transformToString();
+
     // Parse the JSON content
-    const versionInfo = JSON.parse(data.Body.toString('utf-8'));
+    const versionInfo = JSON.parse(bodyContents);
 
     // 从package.json获取软件的实际版本
     let currentVersion = '2.0.0'; // Default version
@@ -435,49 +734,41 @@ export async function checkForUpdates(force = false) {
 
     if (isNewerVersion(currentVersion, versionInfo.version)) {
       console.log('New version available');
+
+      // 不显示对话框，直接下载更新
+      // 由于我们已经修改了showUpdateDialog函数，它现在总是返回true
       const shouldDownload = await showUpdateDialog(versionInfo);
 
       if (shouldDownload) {
-        // Download the update
+        // 下载更新
         await downloadUpdate(versionInfo);
       }
     } else {
       console.log('No new version available');
-      // 只在强制检查时显示"已是最新版本"对话框
-      if (force) {
-        await dialog.showMessageBox({
-          type: 'info',
-          title: `${productName} 检查更新`,
-          message: '已是最新版本',
-          detail: `当前版本 ${currentVersion} 已是最新版本。`,
-          buttons: ['确定']
-        });
-      }
+      // 不显示任何对话框，直接继续使用应用程序
     }
   } catch (error) {
     console.error('Error checking for updates:', error);
     console.error('Error details:', error.message);
 
-    // 只在强制检查时显示错误对话框
-    if (force) {
-      await dialog.showMessageBox({
-        type: 'error',
-        title: `${productName} 检查更新失败`,
-        message: '无法检查更新',
-        detail: `检查更新时出错: ${error.message}\n\n请检查网络连接后重试。`,
-        buttons: ['确定']
-      });
-    }
+    // 不显示错误对话框，只记录错误
+    // 应用程序将继续正常运行
   }
 }
 
 // Initialize update checker
 export function initUpdateChecker() {
-  // Check for updates on startup (with a delay)
-  setTimeout(() => checkForUpdates(true), 10000);
+  // Check for updates immediately on startup with force=true to show dialog
+  console.log('Initializing update checker - checking for updates immediately with force=true');
+
+  // Small delay to allow app to finish loading, but force the check
+  setTimeout(() => checkForUpdates(true), 3000);
 
   // Set up periodic update checks
-  setInterval(() => checkForUpdates(), UPDATE_CHECK_INTERVAL);
+  setInterval(() => checkForUpdates(true), UPDATE_CHECK_INTERVAL);
+
+  // Log when periodic checks are scheduled
+  console.log(`Scheduled periodic update checks every ${UPDATE_CHECK_INTERVAL / (1000 * 60 * 60)} hours (forced checks)`);
 }
 
 // CLI functionality for manual checks
@@ -517,20 +808,23 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.log(`Current version: ${currentVersion}`);
       console.log('Checking for updates...');
 
-      // Create S3 client
-      const params = {
+      // Create S3 client command
+      const command = new GetObjectCommand({
         Bucket: R2_BUCKET_NAME,
-        Key: 'latest-version.json'
-      };
+        Key: 'latest.yml'
+      });
 
       // Get latest version info
-      const data = await s3Client.getObject(params).promise();
-      if (!data || !data.Body) {
+      const response = await s3Client.send(command);
+      if (!response || !response.Body) {
         throw new Error('Failed to fetch version info: No data returned');
       }
 
+      // Convert the readable stream to a string
+      const bodyContents = await response.Body.transformToString();
+
       // Parse the JSON content
-      const versionInfo = JSON.parse(data.Body.toString('utf-8'));
+      const versionInfo = JSON.parse(bodyContents);
       console.log(`Latest version: ${versionInfo.version}`);
 
       // Compare versions
