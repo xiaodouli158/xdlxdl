@@ -6,7 +6,7 @@ import { exec } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import { promisify } from 'util';
-import { getSoftwareVersion } from '../src/utils/Findsoftpaths.js';
+import { getSoftwareVersion } from './utils/Findsoftpaths.js';
 import { loginDouyinWeb } from './modules/douyinWebLogin.js';
 import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
 import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
@@ -132,12 +132,40 @@ function createWindow() {
       // 生产环境加载打包后的文件
       const htmlPath = path.join(__dirname, '../dist/index.html');
       console.log('Loading production file:', htmlPath);
-      mainWindow.loadFile(htmlPath);
+
+      // Add logging to help diagnose blank window issues
+      console.log('Current directory:', __dirname);
+      console.log('HTML path exists:', fs.existsSync(htmlPath));
+      console.log('Router changed from BrowserRouter to HashRouter to fix blank window issues in production');
+
+      try {
+        mainWindow.loadFile(htmlPath);
+      } catch (error) {
+        console.error('Error loading HTML file:', error);
+        // Try alternative path as fallback
+        const altPath = path.join(process.resourcesPath, 'app', 'dist', 'index.html');
+        console.log('Trying alternative path:', altPath);
+        console.log('Alternative path exists:', fs.existsSync(altPath));
+
+        try {
+          mainWindow.loadFile(altPath);
+        } catch (altError) {
+          console.error('Error loading alternative HTML file:', altError);
+        }
+      }
     }
 
     // 添加window加载错误事件监听
-    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
       console.error('Window failed to load:', errorCode, errorDescription);
+    });
+
+    // 添加DOM加载完成事件监听，用于调试路由问题
+    mainWindow.webContents.on('dom-ready', () => {
+      console.log('DOM ready event fired');
+      // 获取当前URL以帮助调试
+      const currentUrl = mainWindow.webContents.getURL();
+      console.log('Current page URL:', currentUrl);
     });
 
     // 添加窗口关闭事件监听
@@ -414,7 +442,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  ipcMain.handle('get-douyin-api-info', async (event, { token, method }) => {
+  ipcMain.handle('get-douyin-api-info', async (_, { token, method }) => {
     try {
       console.log(`Getting Douyin API info for method: ${method} with token: ${token ? token.substring(0, 5) + '...' : 'none'}`);
 
@@ -570,7 +598,7 @@ app.whenReady().then(async () => {
     }
   });
 
-  ipcMain.handle('get-bilibili-stream-info', async (event, { token }) => {
+  ipcMain.handle('get-bilibili-stream-info', async (_, { token }) => {
     try {
       // 在实际应用中，这里应该调用 Bilibili API 获取推流信息
       console.log(`Getting Bilibili stream info with token: ${token ? token.substring(0, 5) + '...' : 'none'}`);

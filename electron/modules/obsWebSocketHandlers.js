@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import os from 'os';
 import { exec } from 'child_process';
 import OBSWebSocket from 'obs-websocket-js';
-import { getSoftwarePath } from '../../src/utils/Findsoftpaths.js';
+import { getSoftwarePath } from '../utils/Findsoftpaths.js';
 
 // 将回调函数转换为 Promise
 const fsReadFile = promisify(fs.readFile);

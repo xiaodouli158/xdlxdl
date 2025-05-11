@@ -194,8 +194,6 @@ function getPathFromRegistry(shortwareName, processName) {
   return null;
 }
 
-
-
 /**
  * 获取软件路径的主函数
  * @param {string} softwareName 软件名称
@@ -244,7 +242,6 @@ async function getSoftwarePath(softwareName, processName = null) {
   console.log(`未能找到 ${softwareName} 的路径`);
   return null;
 }
-
 
 /**
  * 获取文件的版本号

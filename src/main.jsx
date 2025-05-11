@@ -1,6 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+// Using HashRouter instead of BrowserRouter for Electron apps
+// HashRouter uses the hash portion of the URL (#) which doesn't require server-side routing
+// This solves blank window issues in production builds where file:// protocol is used
+import { HashRouter } from 'react-router-dom';
 import App from './App';
 import './App.css';
 // import { StreamingProvider } from './context/StreamingContext';
@@ -15,11 +18,11 @@ if (!rootElement) {
     const root = ReactDOM.createRoot(rootElement);
     root.render(
       <React.StrictMode>
-        <BrowserRouter>
+        <HashRouter>
           {/* <StreamingProvider> */}
             <App />
           {/* </StreamingProvider> */}
-        </BrowserRouter>
+        </HashRouter>
       </React.StrictMode>
     );
     console.log('React app rendered successfully');

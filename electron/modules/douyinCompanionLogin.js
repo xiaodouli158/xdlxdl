@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { promisify } from 'util';
-import { getSoftwareVersion, getSoftwarePath } from '../../src/utils/Findsoftpaths.js';
+import { getSoftwareVersion, getSoftwarePath } from '../utils/Findsoftpaths.js';
 import { getDouyinCookies } from './getDouyinCompanion_cookies.js';
 import pathManager, { PathType } from '../utils/pathManager.js';
 
