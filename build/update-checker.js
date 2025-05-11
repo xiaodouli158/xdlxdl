@@ -619,10 +619,49 @@ async function downloadUpdate(versionInfo) {
 
     console.error('下载更新失败，等待用户手动操作');
 
-    // 不返回false，而是返回一个永不解决的Promise，这样应用程序会继续等待用户操作
+    // 添加一个关闭按钮，允许用户关闭更新窗口并继续使用应用程序
+    progressWindow.webContents.executeJavaScript(`
+      // 添加关闭按钮
+      if (!document.getElementById('close-button')) {
+        const buttonsContainer = document.querySelector('.buttons-container');
+        const closeButton = document.createElement('button');
+        closeButton.id = 'close-button';
+        closeButton.className = 'button secondary-button';
+        closeButton.innerHTML = '<span class="button-icon">✖</span>关闭';
+        closeButton.style.backgroundColor = '#e74c3c';
+        closeButton.style.color = 'white';
+        buttonsContainer.appendChild(closeButton);
+
+        // 添加关闭按钮的事件监听
+        closeButton.addEventListener('click', function() {
+          const event = new CustomEvent('close-window-requested');
+          document.dispatchEvent(event);
+        });
+      }
+    `);
+
+    // 添加关闭窗口的事件监听
+    progressWindow.webContents.executeJavaScript(`
+      document.addEventListener('close-window-requested', function() {
+        console.log('用户请求关闭更新窗口');
+        require('electron').ipcRenderer.send('close-update-window');
+      });
+    `);
+
+    // 监听来自渲染进程的关闭窗口请求
+    const { ipcMain } = require('electron');
+    ipcMain.once('close-update-window', () => {
+      console.log('关闭更新窗口，重新启用主窗口');
+      if (!progressWindow.isDestroyed()) {
+        progressWindow.destroy(); // 强制关闭窗口
+      }
+      enableMainWindow(); // 重新启用主窗口
+    });
+
+    // 返回一个Promise，但允许用户通过关闭按钮来中断更新过程
     return new Promise(() => {
-      // 这个Promise永远不会解决，所以应用程序会继续等待
-      // 用户可以通过点击手动下载或访问官网按钮来继续
+      // 这个Promise永远不会解决
+      // 我们通过ipcMain事件来处理用户关闭窗口的请求
     });
   }
 }
@@ -651,6 +690,67 @@ async function showInstallPrompt(filePath) {
       detail: `启动安装程序时出错: ${error.message}\n\n请手动运行安装程序: ${filePath}`,
       buttons: ['确定']
     });
+  }
+}
+
+// 获取主窗口的引用
+function getMainWindow() {
+  const allWindows = BrowserWindow.getAllWindows();
+  // 主窗口通常是第一个创建的窗口，但为了安全起见，我们排除掉明确是更新窗口的窗口
+  return allWindows.find(win =>
+    win.title !== '下载更新' &&
+    !win.isDestroyed() &&
+    win.webContents &&
+    !win.webContents.isDestroyed()
+  );
+}
+
+// 禁用主窗口交互
+function disableMainWindow() {
+  const mainWindow = getMainWindow();
+  if (mainWindow) {
+    console.log('禁用主窗口交互');
+    // 设置窗口为不可交互
+    mainWindow.setEnabled(false);
+    // 可选：添加一个覆盖层表明窗口被禁用
+    mainWindow.webContents.executeJavaScript(`
+      if (!document.getElementById('update-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.id = 'update-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.color = 'white';
+        overlay.style.fontSize = '18px';
+        overlay.style.fontWeight = 'bold';
+        overlay.innerHTML = '<div>正在更新软件，请稍候...</div>';
+        document.body.appendChild(overlay);
+      }
+    `).catch(err => console.error('添加覆盖层失败:', err));
+  }
+}
+
+// 启用主窗口交互
+function enableMainWindow() {
+  const mainWindow = getMainWindow();
+  if (mainWindow) {
+    console.log('启用主窗口交互');
+    // 重新启用窗口交互
+    mainWindow.setEnabled(true);
+    // 移除覆盖层
+    mainWindow.webContents.executeJavaScript(`
+      const overlay = document.getElementById('update-overlay');
+      if (overlay) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    `).catch(err => console.error('移除覆盖层失败:', err));
   }
 }
 
@@ -735,13 +835,27 @@ export async function checkForUpdates(force = false) {
     if (isNewerVersion(currentVersion, versionInfo.version)) {
       console.log('New version available');
 
+      // 禁用主窗口交互
+      disableMainWindow();
+
       // 不显示对话框，直接下载更新
       // 由于我们已经修改了showUpdateDialog函数，它现在总是返回true
       const shouldDownload = await showUpdateDialog(versionInfo);
 
       if (shouldDownload) {
-        // 下载更新
-        await downloadUpdate(versionInfo);
+        try {
+          // 下载更新
+          await downloadUpdate(versionInfo);
+          // 下载成功后，主窗口会关闭，所以不需要重新启用
+        } catch (error) {
+          // 如果下载失败，重新启用主窗口
+          console.error('下载更新失败，重新启用主窗口:', error);
+          enableMainWindow();
+          throw error; // 重新抛出错误，让外层错误处理来处理
+        }
+      } else {
+        // 如果用户取消下载，重新启用主窗口
+        enableMainWindow();
       }
     } else {
       console.log('No new version available');
@@ -750,6 +864,9 @@ export async function checkForUpdates(force = false) {
   } catch (error) {
     console.error('Error checking for updates:', error);
     console.error('Error details:', error.message);
+
+    // 确保在出错时重新启用主窗口
+    enableMainWindow();
 
     // 不显示错误对话框，只记录错误
     // 应用程序将继续正常运行
