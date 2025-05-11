@@ -88,9 +88,9 @@ function isNewerVersion(current, latest) {
 
 // Show update dialog (now just logs the update info and returns true to download)
 async function showUpdateDialog(versionInfo) {
-  // 从package.json获取软件的实际版本和产品名称
+  // 获取软件的实际版本和产品名称
   let currentVersion = '2.0.0'; // Default version
-  let productName = "Webcast Mate"; // Default product name
+  const productName = getProductName();
 
   try {
     // Try to get version from app
@@ -107,7 +107,6 @@ async function showUpdateDialog(versionInfo) {
       if (fs.existsSync(packageJsonPath)) {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
         currentVersion = packageJson.version || currentVersion;
-        productName = packageJson.build?.productName || productName;
         console.log(`Got version from package.json: ${currentVersion}`);
       } else {
         console.log('package.json not found, using default values');
@@ -705,6 +704,32 @@ function getMainWindow() {
   );
 }
 
+// 获取产品名称
+function getProductName() {
+  let productName = "Webcast Mate"; // 默认产品名称
+  try {
+    // 尝试从app获取
+    if (app && typeof app.getName === 'function') {
+      const appName = app.getName();
+      if (appName && appName !== 'Electron') {
+        productName = appName;
+      }
+    }
+
+    // 尝试从package.json获取
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      if (packageJson.build && packageJson.build.productName) {
+        productName = packageJson.build.productName;
+      }
+    }
+  } catch (error) {
+    console.error('Error getting product name:', error);
+  }
+  return productName;
+}
+
 // 禁用主窗口交互
 function disableMainWindow() {
   const mainWindow = getMainWindow();
@@ -754,6 +779,86 @@ function enableMainWindow() {
   }
 }
 
+// 处理更新检查失败
+async function handleUpdateCheckFailure(errorMessage, title = '更新检查失败') {
+  console.error('更新检查失败:', errorMessage);
+
+  // 不允许用户继续使用软件，添加覆盖层
+  const mainWindow = getMainWindow();
+  if (mainWindow) {
+    mainWindow.webContents.executeJavaScript(`
+      if (!document.getElementById('update-error-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.id = 'update-error-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.color = 'white';
+        overlay.style.padding = '20px';
+        overlay.style.textAlign = 'center';
+
+        const icon = document.createElement('div');
+        icon.style.fontSize = '48px';
+        icon.style.marginBottom = '20px';
+        icon.innerHTML = '⚠️';
+
+        const titleElem = document.createElement('div');
+        titleElem.style.fontSize = '24px';
+        titleElem.style.fontWeight = 'bold';
+        titleElem.style.marginBottom = '15px';
+        titleElem.textContent = '${title}';
+
+        const message = document.createElement('div');
+        message.style.fontSize = '16px';
+        message.style.marginBottom = '25px';
+        message.style.maxWidth = '80%';
+        message.style.lineHeight = '1.5';
+        message.textContent = '无法检查软件更新，请访问官方网站下载最新版本。';
+
+        overlay.appendChild(icon);
+        overlay.appendChild(titleElem);
+        overlay.appendChild(message);
+
+        document.body.appendChild(overlay);
+      }
+    `).catch(err => console.error('添加覆盖层失败:', err));
+  }
+
+  // 获取产品名称
+  const productName = getProductName();
+
+  // 显示错误对话框，提示用户访问官方网站下载最新版本
+  try {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: `${productName} ${title}`,
+      message: '无法检查更新',
+      detail: `${errorMessage}\n\n您必须访问官方网站下载最新版本才能继续使用软件。`,
+      buttons: ['访问官网'],
+      defaultId: 0,
+      cancelId: 0 // 设置取消按钮也是访问官网，防止用户通过ESC键关闭对话框
+    });
+
+    // 无论用户点击什么按钮，都打开官网并退出应用
+    await shell.openExternal('https://www.xdlwebcast.com');
+  } catch (dialogError) {
+    console.error('Error showing dialog:', dialogError);
+  } finally {
+    // 延迟一秒后退出应用，给用户一点时间看到浏览器打开
+    setTimeout(() => {
+      app.exit(0);
+    }, 1000);
+  }
+}
+
 // Check for updates
 export async function checkForUpdates(force = false) {
   console.log(`Starting update check. Force update: ${force}`);
@@ -777,6 +882,9 @@ export async function checkForUpdates(force = false) {
   // Check if R2 account ID is configured
   if (!R2_ACCOUNT_ID) {
     console.log('Skipping update check - R2_ACCOUNT_ID not configured');
+
+    // 使用辅助函数处理更新检查失败
+    await handleUpdateCheckFailure('更新服务未正确配置。', '更新服务未配置');
     return;
   }
 
@@ -801,9 +909,9 @@ export async function checkForUpdates(force = false) {
     // Parse the JSON content
     const versionInfo = JSON.parse(bodyContents);
 
-    // 从package.json获取软件的实际版本
+    // 获取软件的实际版本和产品名称
     let currentVersion = '2.0.0'; // Default version
-    let productName = "Webcast Mate"; // Default product name
+    const productName = getProductName();
 
     try {
       // Try to get version from app
@@ -820,7 +928,6 @@ export async function checkForUpdates(force = false) {
         if (fs.existsSync(packageJsonPath)) {
           const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
           currentVersion = packageJson.version || currentVersion;
-          productName = packageJson.build?.productName || productName;
           console.log(`Got version from package.json: ${currentVersion}`);
         } else {
           console.log('package.json not found, using default values');
@@ -865,11 +972,8 @@ export async function checkForUpdates(force = false) {
     console.error('Error checking for updates:', error);
     console.error('Error details:', error.message);
 
-    // 确保在出错时重新启用主窗口
-    enableMainWindow();
-
-    // 不显示错误对话框，只记录错误
-    // 应用程序将继续正常运行
+    // 使用辅助函数处理更新检查失败
+    await handleUpdateCheckFailure(`检查更新时出错: ${error.message}`);
   }
 }
 
