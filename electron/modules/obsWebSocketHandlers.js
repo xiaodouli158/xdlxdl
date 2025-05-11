@@ -261,8 +261,27 @@ async function startOBSProcess() {
 
     console.log('找到 OBS 安装路径:', obsPath);
 
-    // 启动 OBS
-    await execAsync(`start "" "${obsPath}"`);
+    // 检查路径是否为快捷方式(.lnk)或可执行文件(.exe)
+    const isLnk = obsPath.toLowerCase().endsWith('.lnk');
+    const isExe = obsPath.toLowerCase().endsWith('.exe');
+
+    // 根据文件类型选择不同的启动方式
+    if (isLnk) {
+      // 如果是快捷方式，使用普通方式启动
+      console.log('检测到OBS路径是快捷方式(.lnk)，使用普通方式启动');
+      await execAsync(`start "" "${obsPath}"`);
+    } else if (isExe) {
+      // 如果是可执行文件，使用FURUI方式启动以解决locale问题
+      console.log('检测到OBS路径是可执行文件(.exe)，使用FURUI方式启动以解决locale问题');
+      // 获取OBS所在目录
+      const obsDir = path.dirname(obsPath);
+      // 切换到OBS目录并使用FURUI方式启动
+      await execAsync(`cd /d "${obsDir}" && start FURUI "${path.basename(obsPath)}"`);
+    } else {
+      // 其他情况使用默认方式启动
+      console.log('未识别的文件类型，使用默认方式启动');
+      await execAsync(`start "" "${obsPath}"`);
+    }
 
     console.log('成功启动 OBS 进程');
 
