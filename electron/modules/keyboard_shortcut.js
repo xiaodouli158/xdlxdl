@@ -60,7 +60,9 @@ function acceleratorToSendKeys(accelerator) {
 
 /**
  * Main function to execute the global keyboard shortcut for starting live stream
- * This shortcut will be sent system-wide without needing to focus on a specific window
+ * First brings the application window to focus, then sends the keyboard shortcut
+ * This ensures the application is the active window before sending keyboard shortcuts
+ * @returns {Promise<boolean>} True if the shortcut was executed successfully
  */
 async function executeCtrlShiftL() {
   try {
@@ -75,7 +77,10 @@ async function executeCtrlShiftL() {
     // 将快捷键字符串转换为SendKeys格式
     const sendKeysFormat = acceleratorToSendKeys(hotkeyConfig.accelerator);
 
-    // Create a PowerShell script with both methods that worked
+    // 获取应用程序名称
+    const appName = "My Electron App"; // 从package.json的productName获取
+
+    // Create a PowerShell script with window focusing and keyboard shortcut execution
     const psScript = `
 # Add the Windows Forms assembly for SendKeys
 Add-Type -AssemblyName System.Windows.Forms
@@ -84,14 +89,101 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
+using System.Text;
 
-public class KeyboardSend
+public class WindowManager
 {
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte bVk, byte bScan, int dwFlags, int dwExtraInfo);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    private const int SW_RESTORE = 9;
+    private const int SW_SHOW = 5;
     private const int KEYEVENTF_EXTENDEDKEY = 0x1;
     private const int KEYEVENTF_KEYUP = 0x2;
+
+    public static bool FocusApplicationWindow(string processName)
+    {
+        bool found = false;
+        Process[] processes = Process.GetProcesses();
+
+        foreach (Process process in processes)
+        {
+            if (process.ProcessName.ToLower().Contains("electron") ||
+                process.ProcessName.ToLower().Contains(processName.ToLower()))
+            {
+                try
+                {
+                    IntPtr mainWindowHandle = process.MainWindowHandle;
+                    if (mainWindowHandle != IntPtr.Zero)
+                    {
+                        // Get window title to verify it's our app
+                        StringBuilder windowTitle = new StringBuilder(256);
+                        GetWindowText(mainWindowHandle, windowTitle, windowTitle.Capacity);
+
+                        Console.WriteLine($"Found window: {windowTitle}");
+
+                        // Restore window if minimized
+                        ShowWindow(mainWindowHandle, SW_RESTORE);
+
+                        // Set as foreground window
+                        SetForegroundWindow(mainWindowHandle);
+
+                        found = true;
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error focusing window: {ex.Message}");
+                }
+            }
+        }
+
+        // If we couldn't find by process name, try enumerating all windows
+        if (!found)
+        {
+            Console.WriteLine("Trying to find window by title...");
+            EnumWindows(new EnumWindowsProc((hWnd, lParam) => {
+                StringBuilder windowTitle = new StringBuilder(256);
+                GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
+
+                if (windowTitle.ToString().Contains(processName))
+                {
+                    Console.WriteLine($"Found window by title: {windowTitle}");
+                    ShowWindow(hWnd, SW_RESTORE);
+                    SetForegroundWindow(hWnd);
+                    found = true;
+                    return false; // Stop enumeration
+                }
+                return true; // Continue enumeration
+            }), IntPtr.Zero);
+        }
+
+        return found;
+    }
 
     public static void KeyDown(byte key)
     {
@@ -122,12 +214,23 @@ public class KeyboardSend
 }
 "@
 
-# No need to wait for window focus since the shortcut is global
-Write-Host "Sending global keyboard shortcut..."
+# First, try to focus our application window
+Write-Host "Attempting to focus application window..."
+$appName = "${appName}"
+$focused = [WindowManager]::FocusApplicationWindow($appName)
 
-# Method 1: Use our custom KeyboardSend class
+if ($focused) {
+    Write-Host "Successfully focused application window"
+} else {
+    Write-Host "Could not focus application window, will try to send global shortcut anyway"
+}
+
+# Wait a moment for the window to fully focus
+Start-Sleep -Milliseconds 500
+
+# Method 1: Use our custom keyboard function
 Write-Host "Trying method 1: Custom keyboard function..."
-[KeyboardSend]::SendKeyCombination(@(${virtualKeyCodesStr}))
+[WindowManager]::SendKeyCombination(@(${virtualKeyCodesStr}))
 Start-Sleep -Milliseconds 500
 
 # Method 2: Use SendKeys as a backup
