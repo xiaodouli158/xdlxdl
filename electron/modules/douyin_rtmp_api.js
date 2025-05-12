@@ -172,12 +172,12 @@ async function getStreamURL(mode = "phone") {
 
 /**
  * Maintain live stream status
- * @param {string} roomid - Room ID (string)
- * @param {string} streamid - Stream ID (string)
+ * @param {string} room_id - Room ID (string)
+ * @param {string} stream_id - Stream ID (string)
  * @param {string} mode - Mode type ("phone" or "auto")
  * @returns {Promise<Object>} - Success status and info
  */
-async function webcastStart(roomid, streamid, mode = "phone") {
+async function webcastStart(room_id, stream_id, mode = "phone") {
   try {
     // Read cookie data
     const cookieData = readCookiesFromFile(pathManager.getPath(PathType.DOUYIN_COOKIES));
@@ -219,9 +219,9 @@ async function webcastStart(roomid, streamid, mode = "phone") {
     };
 
     // Prepare data - ensure IDs are strings
-    const data = `stream_id=${streamid}&room_id=${roomid}&status=2`;
+    const data = `stream_id=${stream_id}&room_id=${room_id}&status=2`;
 
-    console.log(`Maintaining stream with roomid: ${roomid}, streamid: ${streamid}`);
+    console.log(`Maintaining stream with room_id: ${room_id}, stream_id: ${stream_id}`);
 
     // Send request
     const response = await axios.post(url, data, { headers });
@@ -304,22 +304,22 @@ async function getStreamURLAndMaintain(mode = "phone") {
 
 /**
  * Continuously maintain a stream
- * @param {string} roomid - Room ID
- * @param {string} streamid - Stream ID
+ * @param {string} room_id - Room ID
+ * @param {string} stream_id - Stream ID
  * @param {string} mode - Mode type ("phone" or "auto")
  * @param {number} interval - Interval in milliseconds
  */
-async function continuouslyMaintainStream(roomid, streamid, mode = "phone", interval = 30000) {
+async function continuouslyMaintainStream(room_id, stream_id, mode = "phone", interval = 30000) {
   console.log(`Starting continuous stream maintenance (${mode} mode) with interval ${interval}ms`);
   console.log(`Press Ctrl+C to stop`);
 
   // Initial maintenance
-  await webcastStart(roomid, streamid, mode);
+  await webcastStart(room_id, stream_id, mode);
 
   // Set up interval for continuous maintenance
   const intervalId = setInterval(async () => {
     try {
-      const result = await webcastStart(roomid, streamid, mode);
+      const result = await webcastStart(room_id, stream_id, mode);
       const timestamp = new Date().toISOString();
 
       if (result.success) {
@@ -374,16 +374,16 @@ async function cliMain() {
     }
   } else if (action === "maintain") {
     // Use values from command line or from saved file
-    let roomid = process.argv[4];
-    let streamid = process.argv[5];
+    let room_id = process.argv[4];
+    let stream_id = process.argv[5];
 
     // If not provided, try to read from file
-    if (!roomid || !streamid) {
+    if (!room_id || !stream_id) {
       try {
         if (fs.existsSync('stream_info.json')) {
           const savedInfo = JSON.parse(fs.readFileSync('stream_info.json', 'utf8'));
-          roomid = savedInfo.room_id;
-          streamid = savedInfo.stream_id;
+          room_id = savedInfo.room_id;
+          stream_id = savedInfo.stream_id;
           console.log(`Using saved stream info from stream_info.json`);
         }
       } catch (error) {
@@ -391,13 +391,13 @@ async function cliMain() {
       }
     }
 
-    if (!roomid || !streamid) {
-      console.error("For 'maintain' action, you must provide roomid and streamid as arguments");
-      console.error("Usage: node get_stream_url_fixed.js phone maintain <roomid> <streamid>");
+    if (!room_id || !stream_id) {
+      console.error("For 'maintain' action, you must provide room_id and stream_id as arguments");
+      console.error("Usage: node get_stream_url_fixed.js phone maintain <room_id> <stream_id>");
       return;
     }
 
-    await continuouslyMaintainStream(roomid, streamid, mode);
+    await continuouslyMaintainStream(room_id, stream_id, mode);
   }
 }
 
@@ -437,16 +437,77 @@ async function main(mode = "phone", options = { handleAuth: false }) {
 
     // For phone mode, check if status is not 2 (ready)
     // If not, return a special response indicating we need to retry
-    if (mode === "phone" && streamResult.status !== 2) {
-      console.log(`Stream not ready yet. Current status: ${streamResult.status}, expected: 2`);
-      return {
-        needsRetry: true,
-        currentStatus: streamResult.status,
-        expectedStatus: 2,
-        room_id: streamResult.room_id,
-        stream_id: streamResult.stream_id,
-        error: '直播间未准备好，请等待或重试'
-      };
+    if (mode === "phone") {
+      // Status = 4: Prompt user to start broadcasting on their phone
+      if (streamResult.status === 4) {
+        console.log(`Stream status is 4: User needs to start broadcasting on their phone`);
+        return {
+          needsRetry: true,
+          currentStatus: streamResult.status,
+          expectedStatus: 2,
+          room_id: streamResult.room_id,
+          stream_id: streamResult.stream_id,
+          statusMessage: '请在手机上开播',
+          error: '请在手机上开播'
+        };
+      }
+      // Status = 2: Prompt user to enable airplane mode or quit the APP
+      else if (streamResult.status === 2) {
+        console.log(`Stream status is 2: Ready for streaming`);
+        // For status 2, we don't need to retry, it's the expected status
+        // But we still want to show a prompt to the user
+
+        // Extract RTMP URL for status=2
+        const rtmpUrl = streamResult.rtmp_push_url;
+
+        if (rtmpUrl) {
+          // Split RTMP URL into stream URL and stream key
+          const lastSlashIndex = rtmpUrl.lastIndexOf('/');
+          let streamUrl = '';
+          let streamKey = '';
+
+          if (lastSlashIndex !== -1 && lastSlashIndex < rtmpUrl.length - 1) {
+            streamUrl = rtmpUrl.substring(0, lastSlashIndex);
+            streamKey = rtmpUrl.substring(lastSlashIndex + 1);
+            console.log(`Split RTMP URL - Stream URL: ${streamUrl}, Stream Key: ${streamKey ? '******' : 'none'}`);
+          }
+
+          return {
+            needsRetry: false,
+            currentStatus: streamResult.status,
+            expectedStatus: 2,
+            room_id: streamResult.room_id,
+            stream_id: streamResult.stream_id,
+            statusMessage: '请打开手机飞行模式或清退APP',
+            isReady: true,
+            rtmpUrl: rtmpUrl,
+            streamUrl: streamUrl,
+            streamKey: streamKey
+          };
+        } else {
+          return {
+            needsRetry: false,
+            currentStatus: streamResult.status,
+            expectedStatus: 2,
+            room_id: streamResult.room_id,
+            stream_id: streamResult.stream_id,
+            statusMessage: '请打开手机飞行模式或清退APP',
+            isReady: true
+          };
+        }
+      }
+      // Other status values: Generic "not ready" message
+      else if (streamResult.status !== 2) {
+        console.log(`Stream not ready yet. Current status: ${streamResult.status}, expected: 2`);
+        return {
+          needsRetry: true,
+          currentStatus: streamResult.status,
+          expectedStatus: 2,
+          room_id: streamResult.room_id,
+          stream_id: streamResult.stream_id,
+          error: '直播间未准备好，请等待或重试'
+        };
+      }
     }
 
     // Extract RTMP URL
@@ -469,9 +530,10 @@ async function main(mode = "phone", options = { handleAuth: false }) {
     return {
       success: true,
       rtmpUrl: rtmpUrl,
-      roomId: streamResult.room_id,
-      streamId: streamResult.stream_id,
+      room_id: streamResult.room_id,
+      stream_id: streamResult.stream_id,
       status: streamResult.status,
+      statusMessage: streamResult.statusMessage, // Include status message if available
       isReady: streamResult.isReady,
       pingStarted: streamResult.isReady
     };
@@ -488,19 +550,19 @@ const MAX_PING_COUNT = 60; // Maximum number of pings
 
 /**
  * Start ping/anchor requests to maintain stream status
- * @param {string} roomId - Room ID
- * @param {string} streamId - Stream ID
+ * @param {string} room_id - Room ID
+ * @param {string} stream_id - Stream ID
  * @param {string} mode - Mode type ("phone" or "auto")
  * @returns {boolean} - Whether the ping was started
  */
-function startPingAnchor(roomId, streamId, mode = "phone") {
+function startPingAnchor(room_id, stream_id, mode = "phone") {
   // Stop any existing ping interval
   stopPingAnchor();
 
   // Reset ping count
   pingCount = 0;
 
-  console.log(`Starting ping/anchor requests for roomId: ${roomId}, streamId: ${streamId}, mode: ${mode}`);
+  console.log(`Starting ping/anchor requests for room_id: ${room_id}, stream_id: ${stream_id}, mode: ${mode}`);
 
   // Create a new interval to ping every 3 seconds
   pingIntervalId = setInterval(async () => {
@@ -511,7 +573,7 @@ function startPingAnchor(roomId, streamId, mode = "phone") {
         pingCount++;
 
         // Call webcastStart to maintain the stream
-        const result = await webcastStart(roomId, streamId, mode);
+        const result = await webcastStart(room_id, stream_id, mode);
 
         // Log the result (only log every 10 pings to reduce console spam)
         if (pingCount % 10 === 0) {

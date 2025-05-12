@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Check, AlertCircle, Link, Key, Copy } from 'lucide-react';
 import LoginModal from '../components/LoginModal';
 import AuthNotification from '../components/AuthNotification';
+import StatusPrompt from '../components/StatusPrompt';
 import { useNavigate } from 'react-router-dom';
 import { loginWithDouyinWeb, loginWithDouyinCompanion } from '../utils/douyinLoginUtils';
 import { loadPlatformUserData, clearPlatformUserData } from '../utils/platformLoginUtils';
@@ -49,6 +50,11 @@ const HomePage = () => {
   // 安全认证相关状态
   const [showAuthNotification, setShowAuthNotification] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
+
+  // 状态提示相关状态
+  const [showStatusPrompt, setShowStatusPrompt] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [statusType, setStatusType] = useState('info');
 
   // 清除重试定时器的函数
   const clearRetryTimer = () => {
@@ -287,13 +293,19 @@ const HomePage = () => {
         setStreamKey(result.streamKey);
         setStreamInfoSuccess(true);
 
+        console.log('===== 获取推流信息成功，开始维持直播状态... =====');
+        console.log('推流地址:', result.streamUrl);
+        console.log('房间ID:', result.room_id);
+        console.log('流ID:', result.stream_id);
+        console.log('直播方式:', streamMethod);
+
         // 如果是手机开播模式，并且获取到了房间ID和流ID，则维持直播状态
-        if (streamMethod === '手机开播' && result.roomId && result.streamId) {
+        if (streamMethod === '手机开播' && result.room_id && result.stream_id) {
           try {
             console.log('开始维持直播状态...');
             const maintainResult = await window.electron.maintainDouyinStream(
-              result.roomId,
-              result.streamId,
+              result.room_id,
+              result.stream_id,
               'phone'
             );
 
@@ -338,6 +350,50 @@ const HomePage = () => {
 
         // 如果是抖音平台且获取失败，则设置重试
         if (platform === '抖音') {
+          // 检查是否是因为状态为2而停止重试
+          if (err.message === '直播间准备中' && result && result.currentStatus === 2) {
+            console.log('状态为2，停止重试并显示推流信息');
+
+            // 清除重试定时器
+            clearRetryTimer();
+
+            // 设置推流信息
+            if (result.streamUrl && result.streamKey) {
+              setStreamUrl(result.streamUrl);
+              setStreamKey(result.streamKey);
+              setStreamInfoSuccess(true);
+
+              // 如果有房间ID和流ID，则维持直播状态
+              if (result.room_id && result.stream_id) {
+                try {
+                  console.log('开始维持直播状态...');
+                  window.electron.maintainDouyinStream(
+                    result.room_id,
+                    result.stream_id,
+                    'phone'
+                  ).then(maintainResult => {
+                    if (maintainResult.success) {
+                      console.log('直播状态维持已启动');
+                    } else {
+                      console.warn('直播状态维持启动失败:', maintainResult.error);
+                    }
+                  }).catch(error => {
+                    console.error('启动直播状态维持时出错:', error);
+                  });
+                } catch (error) {
+                  console.error('启动直播状态维持时出错:', error);
+                }
+              }
+
+              // 重置状态
+              setOperationInProgress(false);
+              setIsLoading(false);
+              setAbortController(null);
+
+              return true;
+            }
+          }
+
           // 只在控制台记录错误，不在UI上显示
           console.log(`获取推流信息失败: ${err.message}，2秒后重试...`);
           // 不设置错误消息，保持UI干净
@@ -513,12 +569,12 @@ const HomePage = () => {
         setStreamInfoSuccess(true);
 
         // 如果是手机开播模式，并且获取到了房间ID和流ID，则维持直播状态
-        if (streamMethod === '手机开播' && result.roomId && result.streamId) {
+        if (streamMethod === '手机开播' && result.room_id && result.stream_id) {
           try {
             console.log('开始维持直播状态...');
             const maintainResult = await window.electron.maintainDouyinStream(
-              result.roomId,
-              result.streamId,
+              result.room_id,
+              result.stream_id,
               'phone'
             );
 
@@ -606,6 +662,88 @@ const HomePage = () => {
 
         // 如果是抖音平台且获取失败，则设置重试
         if (platform === '抖音') {
+          // 检查是否是因为状态为2而停止重试
+          if (err.message === '直播间准备中' && result && result.currentStatus === 2) {
+            console.log('状态为2，停止重试并显示推流信息');
+
+            // 清除重试定时器
+            clearRetryTimer();
+
+            // 设置推流信息
+            if (result.streamUrl && result.streamKey) {
+              setStreamUrl(result.streamUrl);
+              setStreamKey(result.streamKey);
+              setStreamInfoSuccess(true);
+
+              // 继续执行自动推流的后续步骤
+              // 不需要return，让代码继续执行
+
+              // 配置 OBS 并启动推流
+              if (window.electron) {
+                try {
+                  console.log('设置 OBS 推流参数...');
+                  // 设置OBS推流参数
+                  window.electron.setOBSStreamSettings(result.streamUrl, result.streamKey)
+                    .then(settingsResult => {
+                      if (!settingsResult.success) {
+                        console.error('设置 OBS 推流参数失败:', settingsResult.message);
+                        return;
+                      }
+
+                      console.log('启动 OBS 推流...');
+                      // 启动OBS推流
+                      window.electron.startOBSStreaming()
+                        .then(streamResult => {
+                          if (!streamResult.success) {
+                            console.error('启动 OBS 推流失败:', streamResult.message);
+                            return;
+                          }
+
+                          console.log('OBS 推流已成功启动');
+                          setIsStreaming(true);
+
+                          // 检测并杀死MediaSDK_Server.exe进程
+                          console.log('检测并杀死MediaSDK_Server.exe进程...');
+                          window.electron.killMediaSDKServer()
+                            .then(killResult => {
+                              console.log('第一次杀死MediaSDK_Server.exe结果:', killResult);
+
+                              // 3秒后再次杀死进程
+                              setTimeout(() => {
+                                window.electron.killMediaSDKServer()
+                                  .then(secondKillResult => {
+                                    console.log('第二次杀死MediaSDK_Server.exe结果:', secondKillResult);
+                                  })
+                                  .catch(killError => {
+                                    console.error('第二次杀死MediaSDK_Server.exe进程失败:', killError);
+                                  });
+                              }, 3000);
+                            })
+                            .catch(killError => {
+                              console.error('第一次杀死MediaSDK_Server.exe进程失败:', killError);
+                            });
+                        })
+                        .catch(error => {
+                          console.error('OBS 推流设置失败:', error);
+                        });
+                    })
+                    .catch(error => {
+                      console.error('OBS 推流设置失败:', error);
+                    });
+                } catch (error) {
+                  console.error('OBS 推流设置失败:', error);
+                }
+              }
+
+              // 重置状态
+              setOperationInProgress(false);
+              setIsLoading(false);
+              setAbortController(null);
+
+              return true;
+            }
+          }
+
           // 只在控制台记录错误，不在UI上显示
           console.log(`获取推流信息失败: ${err.message}，2秒后重试...`);
           // 不设置错误消息，保持UI干净
@@ -729,6 +867,30 @@ const HomePage = () => {
           setShowAuthNotification(true);
         }
       };
+
+      // 监听状态通知
+      if (window.electron.onStatusNotification) {
+        const handleStatusNotification = (data) => {
+          console.log('收到状态通知:', data);
+          if (data && data.message) {
+            setStatusMessage(data.message);
+
+            // 根据状态值设置不同的提示类型
+            if (data.status === 4) {
+              setStatusType('warning'); // 状态4: 请在手机上开播
+            } else if (data.status === 2) {
+              setStatusType('info');    // 状态2: 请打开手机飞行模式或清退APP
+            } else {
+              setStatusType('info');    // 其他状态
+            }
+
+            setShowStatusPrompt(true);
+          }
+        };
+
+        // 添加IPC事件监听
+        window.electron.onStatusNotification(handleStatusNotification);
+      }
 
       // 添加DOM事件监听
       window.addEventListener('auth-notification', handleDomAuthNotification);
@@ -872,6 +1034,14 @@ const HomePage = () => {
         message={authMessage}
         isVisible={showAuthNotification}
         onClose={() => setShowAuthNotification(false)}
+      />
+
+      {/* 状态提示 */}
+      <StatusPrompt
+        message={statusMessage}
+        isVisible={showStatusPrompt}
+        onClose={() => setShowStatusPrompt(false)}
+        type={statusType}
       />
       {/* 上部区域：直播设置 */}
       <div className="flex flex-row gap-3">

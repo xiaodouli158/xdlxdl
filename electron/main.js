@@ -449,7 +449,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('get-douyin-api-info', async (_, { token, method }) => {
     try {
-      console.log(`Getting Douyin API info for method: ${method} with token: ${token ? token.substring(0, 5) + '...' : 'none'}`);
+      console.log(`Getting Douyin API info for method: ${method} with token: ${token ? (typeof token === 'string' ? token.substring(0, 5) + '...' : JSON.stringify(token)) : 'none'}`);
 
       // 导入douyin_rtmp_api模块
       try {
@@ -477,19 +477,19 @@ app.whenReady().then(async () => {
         if (method === 'maintain' && token) {
           try {
             const { startPingAnchor } = await import('./modules/douyin_rtmp_api.js');
-            const { roomId, streamId, mode } = token;
+            const { room_id, stream_id, mode } = token;
 
-            if (!roomId || !streamId) {
+            if (!room_id || !stream_id) {
               return { error: '缺少必要的房间ID或流ID参数' };
             }
 
-            const started = startPingAnchor(roomId, streamId, mode || 'phone');
+            const started = startPingAnchor(room_id, stream_id, mode || 'phone');
             console.log('Started ping/anchor requests:', started);
             return {
               success: true,
               message: '已开始直播状态维持',
-              roomId,
-              streamId
+              room_id,
+              stream_id
             };
           } catch (error) {
             console.error('Error starting ping/anchor requests:', error);
@@ -552,15 +552,30 @@ app.whenReady().then(async () => {
           };
         }
 
+        // 检查是否有状态消息需要显示给用户（无论是否需要重试）
+        if (result.statusMessage) {
+          console.log(`Status message to display: ${result.statusMessage}`);
+
+          // 向渲染进程发送状态消息通知
+          if (mainWindow) {
+            mainWindow.webContents.send('status-notification', {
+              message: result.statusMessage,
+              status: result.currentStatus
+            });
+          }
+        }
+
         // 检查是否需要重试（手机开播模式下，状态不为2）
         if (result.needsRetry) {
           console.log(`Stream not ready yet. Current status: ${result.currentStatus}, expected: ${result.expectedStatus}`);
+
           return {
             needsRetry: true,
             currentStatus: result.currentStatus,
             expectedStatus: result.expectedStatus,
-            roomId: result.room_id,
-            streamId: result.stream_id,
+            room_id: result.room_id,
+            stream_id: result.stream_id,
+            statusMessage: result.statusMessage,
             error: result.error || '直播间未准备好，请等待或重试'
           };
         }
@@ -569,6 +584,19 @@ app.whenReady().then(async () => {
         if (result.error) {
           console.error('Douyin API error:', result.error);
           return { error: result.error };
+        }
+
+        // 检查是否有状态消息需要显示给用户（针对成功获取RTMP URL的情况）
+        if (result.statusMessage && result.status === 2) {
+          console.log(`Status message to display for status=2: ${result.statusMessage}`);
+
+          // 向渲染进程发送状态消息通知
+          if (mainWindow) {
+            mainWindow.webContents.send('status-notification', {
+              message: result.statusMessage,
+              status: result.status
+            });
+          }
         }
 
         // 检查是否有RTMP URL
@@ -585,8 +613,10 @@ app.whenReady().then(async () => {
             return {
               streamUrl,
               streamKey,
-              roomId: result.roomId,
-              streamId: result.streamId
+              room_id: result.room_id,
+              stream_id: result.stream_id,
+              currentStatus: result.status,
+              statusMessage: result.statusMessage
             };
           }
         }
@@ -606,7 +636,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('get-bilibili-stream-info', async (_, { token }) => {
     try {
       // 在实际应用中，这里应该调用 Bilibili API 获取推流信息
-      console.log(`Getting Bilibili stream info with token: ${token ? token.substring(0, 5) + '...' : 'none'}`);
+      console.log(`Getting Bilibili stream info with token: ${token ? (typeof token === 'string' ? token.substring(0, 5) + '...' : JSON.stringify(token)) : 'none'}`);
 
       // 模拟推流信息
       return {

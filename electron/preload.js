@@ -21,8 +21,8 @@ contextBridge.exposeInMainWorld('electron', {
   getDouyinCompanionInfo: () => ipcRenderer.invoke('get-douyin-companion-info'),
   getDouyinApiInfo: (token, method) => ipcRenderer.invoke('get-douyin-api-info', { token, method }),
   stopDouyinPingAnchor: () => ipcRenderer.invoke('get-douyin-api-info', { token: null, method: 'stop' }),
-  maintainDouyinStream: (roomId, streamId, mode) => ipcRenderer.invoke('get-douyin-api-info', {
-    token: { roomId, streamId, mode },
+  maintainDouyinStream: (room_id, stream_id, mode) => ipcRenderer.invoke('get-douyin-api-info', {
+    token: { room_id, stream_id, mode },
     method: 'maintain'
   }),
   getBilibiliStreamInfo: (token) => ipcRenderer.invoke('get-bilibili-stream-info', { token }),
@@ -45,5 +45,10 @@ contextBridge.exposeInMainWorld('electron', {
   // 事件监听
   onAuthNotification: (callback) => {
     ipcRenderer.on('auth-notification', (event, data) => callback(data));
+  },
+
+  // 状态通知事件监听
+  onStatusNotification: (callback) => {
+    ipcRenderer.on('status-notification', (event, data) => callback(data));
   },
 });
