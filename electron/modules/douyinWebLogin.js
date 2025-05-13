@@ -1,4 +1,4 @@
-// douyinWebLogin.js - 抖音网页登录模块
+// douyinWebLogin.js - 抖音网页登录模块，使用时先清除浏览器所有数据防止旧数据残留
 import { BrowserWindow, session, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
@@ -11,6 +11,63 @@ const __dirname = path.dirname(__filename);
 
 // 定义cookie文件保存路径
 const cookieFilePath = pathManager.getPath(PathType.DOUYIN_COOKIES);
+
+/**
+ * 清除浏览器所有数据，使其像新浏览器一样
+ * @returns {Promise<boolean>} 清除结果
+ */
+async function clearAllBrowserData() {
+  try {
+    console.log('正在清除浏览器所有数据，重置为新浏览器状态...');
+
+    // 获取所有cookies
+    const cookies = await session.defaultSession.cookies.get({});
+    console.log(`找到 ${cookies.length} 个cookies需要清除`);
+
+    // 逐个删除所有cookie
+    for (const cookie of cookies) {
+      try {
+        await session.defaultSession.cookies.remove(
+          `https://${cookie.domain}${cookie.path}`,
+          cookie.name
+        );
+      } catch (err) {
+        console.warn(`删除cookie ${cookie.name} 失败: ${err.message}`);
+      }
+    }
+
+    // 清除所有存储数据，不指定origin表示清除所有网站的数据
+    await session.defaultSession.clearStorageData({
+      storages: [
+        'appcache',
+        'cookies',
+        'filesystem',
+        'indexdb',
+        'localstorage',
+        'shadercache',
+        'websql',
+        'serviceworkers',
+        'cachestorage',
+        'sessionstorage'
+      ]
+    });
+
+    // 清除HTTP缓存
+    await session.defaultSession.clearCache();
+
+    // 清除主机解析器缓存
+    await session.defaultSession.clearHostResolverCache();
+
+    // 清除认证缓存
+    await session.defaultSession.clearAuthCache();
+
+    console.log('浏览器所有数据已清除，现在是全新状态');
+    return true;
+  } catch (error) {
+    console.error(`清除浏览器数据失败: ${error.message}`);
+    return false;
+  }
+}
 
 /**
  * 将cookies保存到文件
@@ -37,9 +94,14 @@ async function saveCookiesToFile(cookies) {
  * @returns {Promise<Object>} 登录结果，包含用户信息和cookies
  */
 export function loginDouyinWeb() {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     try {
       console.log('Opening Douyin web login page');
+
+      // 先清除浏览器所有数据，使其像新浏览器一样
+      console.log('正在清除浏览器所有数据...');
+      await clearAllBrowserData();
+      console.log('浏览器数据清除完成，准备打开登录窗口');
 
       // 创建一个新的浏览器窗口
       let loginWindow = new BrowserWindow({
@@ -54,7 +116,7 @@ export function loginDouyinWeb() {
         resizable: false
       });
 
-      // 直接加载抖音登录页面
+      // 加载抖音登录页面
       loginWindow.loadURL('https://www.douyin.com/user/self');
 
       // 在开发模式下打开开发者工具
@@ -202,8 +264,8 @@ export function loginDouyinWeb() {
                       like_Count
                     });
 
-                    // 强制设置hasData为true，确保继续处理
-                    const hasData = true;
+                    // 根据实际获取的数据判断是否有真实数据
+                    const hasData = nickname !== '抖音用户' && avatar_url !== null;
 
                     console.log('Extracted user info:', {
                       nickname,
@@ -231,38 +293,35 @@ export function loginDouyinWeb() {
 
               console.log(`Attempt ${retryCount}/${maxRetries} - User info extracted:`, userInfo);
 
-              // 如果获取到了数据，则处理登录成功
-              // 强制设置hasData为true，确保继续处理
-              if (userInfo) {
-                userInfo.hasData = true;
-              }
+              // 判断是否获取到真实用户数据 - 昵称不是默认的"抖音用户"且有头像
+              const hasRealUserData = userInfo &&
+                                     userInfo.nickname &&
+                                     userInfo.nickname !== '抖音用户' &&
+                                     userInfo.avatar_url;
 
-              // 放宽条件：只要有userInfo对象就认为有数据
-              if (userInfo && loginWindow) {
-                // 打印详细的判断条件，便于调试
-                console.log('登录判断条件:', {
-                  'userInfo存在': !!userInfo,
-                  'userInfo.hasData': userInfo ? userInfo.hasData : false,
-                  'loginWindow存在': !!loginWindow,
-                  '昵称': userInfo ? userInfo.nickname : null,
-                  '头像': userInfo ? userInfo.avatar_url : null,
-                  '关注数': userInfo ? userInfo.following_count : null,
-                  '粉丝数': userInfo ? userInfo.follower_count : null,
-                  '获赞数': userInfo ? userInfo.like_Count : null
-                });
-                // 获取cookies
+              // 打印详细的判断条件，便于调试
+              console.log('登录判断条件:', {
+                '重试次数': retryCount,
+                '用户数据存在': !!userInfo,
+                '昵称': userInfo ? userInfo.nickname : null,
+                '头像': userInfo ? userInfo.avatar_url : null,
+                '关注数': userInfo ? userInfo.following_count : null,
+                '粉丝数': userInfo ? userInfo.follower_count : null,
+                '获赞数': userInfo ? userInfo.like_Count : null,
+                '是否真实数据': hasRealUserData
+              });
+
+              // 如果已经获取到真实用户数据，则获取cookie并完成登录
+              if (hasRealUserData) {
+                console.log('检测到真实用户数据，登录成功！');
+
+                // 获取cookies - 只有在获取到真实用户数据后才执行
                 const cookies = await session.defaultSession.cookies.get({ domain: '.douyin.com' });
-                // 检查是否有sessionid cookie
-                const hasSessionId = cookies.some(cookie => cookie.name === 'sessionid');
-                console.log('Session ID cookie found:', hasSessionId);
 
                 // 保存cookies到文件
                 if (cookies && cookies.length > 0) {
                   await saveCookiesToFile(cookies);
-
-                  // 创建cookieString并添加到返回结果中
-                  const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-                  console.log(`已生成Cookie字符串，长度: ${cookieString.length}`);
+                  console.log(`已保存 ${cookies.length} 个Cookie到文件`);
                 }
 
                 // 标记为已登录
@@ -275,14 +334,22 @@ export function loginDouyinWeb() {
                   isCheckingLogin = false;
                 }
 
-                // 构建用户数据
+                // 构建用户数据 - 只使用实际获取到的数据
+                let userId = '';
+                const sessionIdCookie = cookies.find(cookie => cookie.name === 'sessionid');
+                if (sessionIdCookie) {
+                  userId = `douyin_${sessionIdCookie.value.substring(0, 8)}`;
+                } else {
+                  userId = `douyin_${userInfo.nickname.replace(/\s+/g, '_')}_${Date.now()}`;
+                }
+
                 const userData = {
-                  id: 'douyin_web_user_' + Date.now(),
-                  nickname: userInfo.nickname || '抖音网页用户',
-                  avatar_url: userInfo.avatar_url || null,
-                  following_count: userInfo.following_count || 50,
-                  follower_count: userInfo.follower_count || 5474,
-                  like_Count: userInfo.like_Count || 35000
+                  id: userId,
+                  nickname: userInfo.nickname,
+                  avatar_url: userInfo.avatar_url,
+                  following_count: userInfo.following_count || 0,
+                  follower_count: userInfo.follower_count || 0,
+                  like_Count: userInfo.like_Count || 0
                 };
 
                 console.log('Final user data:', userData);
@@ -294,16 +361,37 @@ export function loginDouyinWeb() {
                   windowToClose.close();
                 }
 
-                // 创建cookieString
-                const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-
                 // 返回用户信息和cookie
                 resolve({
                   success: true,
                   user: userData,
                   cookies: cookies,
-                  cookieString: cookieString
+                  cookieString: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
                 });
+                return;
+              }
+
+              // 如果没有获取到真实用户数据，尝试刷新页面
+              if (retryCount % 10 === 0 && !loginWindow.hasTriedRefresh) {
+                console.log(`尝试刷新页面获取用户数据... (尝试次数: ${retryCount})`);
+                loginWindow.hasTriedRefresh = true;
+
+                try {
+                  await loginWindow.loadURL('https://www.douyin.com/user/self');
+                  console.log('已刷新页面，等待加载用户资料...');
+                } catch (refreshError) {
+                  console.error('刷新页面失败:', refreshError);
+                }
+              }
+
+              // 继续等待获取用户数据
+              console.log(`尚未获取到真实用户数据，继续等待... (${retryCount}/${maxRetries})`);
+
+              // 如果重试次数达到上限，则登录失败
+              if (retryCount >= maxRetries - 1) {
+                console.log('重试次数达到上限，登录失败');
+                resolve({ success: false, error: '登录失败：未能获取到用户真实数据' });
+                return;
               }
             } catch (error) {
               console.error('Error checking login status:', error);

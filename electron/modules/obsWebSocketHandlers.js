@@ -127,7 +127,7 @@ async function ensureAndConnectToOBS(address = '', password = '') {
 
       // 等待 OBS 启动完成
       console.log('等待 OBS 启动完成...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 8000));
     }
 
     // 尝试连接到 OBS WebSocket 服务器
