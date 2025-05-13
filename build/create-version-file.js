@@ -16,10 +16,10 @@ const rootDir = path.resolve(__dirname, '..');
 // Load package.json to get the current version
 const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const { version, build } = packageJson;
-const productName = build?.productName || "XDLWebcast";
+const productName = build?.productName || "小斗笠直播助手";
 
 // Path to the installer file
-const installerFileName = `XDLWebcast-Setup-${version}.exe`;
+const installerFileName = `小斗笠直播助手-Setup-${version}.exe`;
 // Get the output directory from package.json or use the same as in build.js
 const outputDir = packageJson.build?.directories?.output || 'dist';
 const outputDirPath = path.join(rootDir, outputDir);

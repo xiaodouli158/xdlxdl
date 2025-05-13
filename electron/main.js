@@ -101,6 +101,7 @@ function createWindow() {
       resizable: false,
       frame: false, // 移除默认窗口边框
       titleBarStyle: 'hidden', // 隐藏标题栏
+      icon: path.join(__dirname, '../build/xdllogo.ico'), // 设置应用图标
     });
 
     // 开发环境下使用Vite开发服务器

@@ -1,4 +1,4 @@
-# My Electron App
+# 小斗笠直播助手
 
 简单的Electron + React + Tailwind CSS应用
 

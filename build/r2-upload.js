@@ -38,7 +38,7 @@ const s3Client = new S3Client({
 });
 
 // Path to the installer file
-const installerFileName = `XDLWebcast-Setup-${version}.exe`;
+const installerFileName = `小斗笠直播助手-Setup-${version}.exe`;
 // Get the output directory from package.json or use the same as in build.js
 const outputDir = packageJson.build?.directories?.output || 'dist';
 const outputDirPath = path.join(rootDir, outputDir);

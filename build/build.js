@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 // Define build configuration
 const config = {
   appId: 'com.xdlwebcast.app',
-  productName: 'XDLWebcast',
+  productName: '小斗笠直播助手',
   asar: true,
   compression: 'maximum',
   directories: {
@@ -19,7 +19,8 @@ const config = {
   win: {
     target: ['nsis'],
     signAndEditExecutable: false,
-    requestedExecutionLevel: 'requireAdministrator'
+    requestedExecutionLevel: 'requireAdministrator',
+    icon: 'build/xdllogo.ico'
   },
   nsis: {
     oneClick: false,
@@ -27,9 +28,11 @@ const config = {
     perMachine: false,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    shortcutName: 'XDLWebcast',
+    shortcutName: '小斗笠直播助手',
     include: 'build/installer.nsh',
-    artifactName: 'XDLWebcast-Setup-${version}.${ext}'
+    artifactName: '小斗笠直播助手-Setup-${version}.${ext}',
+    installerIcon: 'build/xdllogo.ico',
+    uninstallerIcon: 'build/xdllogo.ico'
   }
 };
 
