@@ -193,6 +193,11 @@ app.whenReady().then(async () => {
   console.log('Initializing update checker...');
   initUpdateChecker();
 
+  // 添加获取应用版本的IPC处理程序
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+  });
+
   createWindow();
 
   // 设置 IPC 事件监听 - 窗口控制

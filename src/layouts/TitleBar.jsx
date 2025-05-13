@@ -5,15 +5,29 @@ import { useNavigate } from 'react-router-dom';
 const TitleBar = () => {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
   const navigate = useNavigate();
 
-  // 检查 electron 对象是否可用
+  // 检查 electron 对象是否可用并获取应用版本
   useEffect(() => {
     console.log('Window.electron:', window.electron);
     if (!window.electron) {
       console.warn('Electron API 不可用，窗口控制功能将不起作用');
+      // 从package.json获取版本号作为备用
+      setAppVersion('1.3.5');
     } else {
       console.log('Electron API 可用');
+      // 获取应用版本
+      window.electron.getAppVersion()
+        .then(version => {
+          console.log('应用版本:', version);
+          setAppVersion(version);
+        })
+        .catch(error => {
+          console.error('获取应用版本时出错:', error);
+          // 从package.json获取版本号作为备用
+          setAppVersion('1.3.5');
+        });
     }
   }, []);
 
@@ -48,14 +62,15 @@ const TitleBar = () => {
   return (
     <div className="bg-slate-800 text-white h-10 flex items-center justify-between select-none drag">
       {/* 应用标题 */}
-      <div className="px-3 font-medium text-sm flex items-center">
-        <div className="w-5 h-5 mr-2 flex-shrink-0" style={{
+      <div className="px-3 font-medium text-base flex items-center">
+        <div className="w-8 h-8 mr-3 flex-shrink-0 -my-2" style={{
           backgroundImage: 'url(/xdllogo.ico)',
           backgroundSize: 'contain',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
         }}></div>
-        小斗笠直播助手
+        <span>小斗笠直播助手</span>
+        <span className="ml-2 text-xs text-gray-400">v{appVersion}</span>
       </div>
 
       {/* 拖动区域 - 大部分标题栏区域可用于拖动窗口 */}

@@ -264,8 +264,11 @@ export function loginDouyinWeb() {
                       like_Count
                     });
 
-                    // 根据实际获取的数据判断是否有真实数据
-                    const hasData = nickname !== '抖音用户' && avatar_url !== null;
+                    // 根据实际获取的数据判断是否有真实数据 - 昵称不是默认的"抖音用户"且有头像且有粉丝数
+                    const hasData = nickname !== '抖音用户' &&
+                                   avatar_url !== null &&
+                                   follower_count !== undefined &&
+                                   follower_count !== null;
 
                     console.log('Extracted user info:', {
                       nickname,
@@ -293,11 +296,13 @@ export function loginDouyinWeb() {
 
               console.log(`Attempt ${retryCount}/${maxRetries} - User info extracted:`, userInfo);
 
-              // 判断是否获取到真实用户数据 - 昵称不是默认的"抖音用户"且有头像
+              // 判断是否获取到真实用户数据 - 昵称不是默认的"抖音用户"且有头像且有粉丝数
               const hasRealUserData = userInfo &&
                                      userInfo.nickname &&
                                      userInfo.nickname !== '抖音用户' &&
-                                     userInfo.avatar_url;
+                                     userInfo.avatar_url &&
+                                     userInfo.follower_count !== undefined &&
+                                     userInfo.follower_count !== null;
 
               // 打印详细的判断条件，便于调试
               console.log('登录判断条件:', {
