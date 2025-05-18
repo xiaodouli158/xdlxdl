@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Music, UserCheck, Sun, Moon } from 'lucide-react';
+import { X, Music, UserCheck, Sun, Moon, Minus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const TitleBar = () => {
@@ -30,6 +30,21 @@ const TitleBar = () => {
         });
     }
   }, []);
+
+  // 处理窗口最小化
+  const handleMinimize = () => {
+    console.log('点击了最小化按钮');
+    if (window.electron) {
+      console.log('调用 electron.minimizeWindow()');
+      try {
+        window.electron.minimizeWindow();
+      } catch (error) {
+        console.error('最小化窗口时出错:', error);
+      }
+    } else {
+      console.warn('electron 对象不可用，无法最小化窗口');
+    }
+  };
 
   // 处理窗口关闭
   const handleClose = () => {
@@ -106,6 +121,15 @@ const TitleBar = () => {
             <Sun size={18} className="text-yellow-300" /> :
             <Moon size={18} className="text-blue-300" />
           }
+        </button>
+
+        {/* 最小化按钮 */}
+        <button
+          onClick={handleMinimize}
+          className="hover:bg-slate-700 focus:outline-none px-3 h-10 flex items-center justify-center"
+          title="最小化"
+        >
+          <Minus size={18} />
         </button>
 
         {/* 关闭按钮 */}
