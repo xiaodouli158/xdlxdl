@@ -1082,7 +1082,7 @@ const HomePage = () => {
                     operationInProgress ? 'bg-blue-600/70 hover:bg-blue-500/90' :
                       'bg-slate-800/90 hover:bg-slate-700/90'}`}
               >
-                {operationInProgress ? '获取中...' : '自动推流'}
+                {operationInProgress ? '获取中...' : isStreaming ? '停止直播' : '开始直播'}
 
                 {/* 成功图标 */}
                 {streamInfoSuccess && !operationInProgress && (
