@@ -1,44 +1,23 @@
 /**
  * OBS WebSocket - Video Capture Device Manager
  *
- * This script adds a video capture device source to OBS and retrieves device information:
- * 1. Connects to OBS WebSocket
- * 2. Creates a video capture device source if it doesn't exist
- * 3. Gets the list of available video capture devices
- * 4. Gets the list of available resolutions for the selected device
- * 5. Identifies the capture card name, model, and type
- * 6. Optimizes connection parameters based on device capabilities
- * 7. Configures the device with selected parameters
+ * This module provides functions to manage video capture devices in OBS:
+ * 1. Creates a video capture device source if it doesn't exist
+ * 2. Gets the list of available video capture devices
+ * 3. Gets the list of available resolutions for the selected device
+ * 4. Identifies the capture card name, model, and type
+ * 5. Optimizes connection parameters based on device capabilities
+ * 6. Configures the device with selected parameters
  */
 
-// Import the OBS WebSocket library
-import OBSWebSocket from 'obs-websocket-js';
+// Import the shared OBS WebSocket client
 import os from 'os';
+import { getOBSWebSocketClient } from './obsWebSocketClient.js';
 
-// Create a new instance of the OBS WebSocket client
-const obs = new OBSWebSocket();
-
-// Connection parameters - adjust these as needed
-const connectionParams = {
-  address: 'ws://localhost:4455', // Default OBS WebSocket address and port
-  password: 'OwuWIvIyVGFwcL01', // OBS WebSocket password (change if needed)
-};
-
-// Source name for the video capture device
-const sourceName = '视频采集设备'; // "Video Capture Device" in Chinese
-
-// Register event handlers
-obs.on('ConnectionOpened', () => {
-  console.log('Event: Connection to OBS WebSocket server opened');
-});
-
-obs.on('ConnectionClosed', () => {
-  console.log('Event: Connection to OBS WebSocket server closed');
-});
-
-obs.on('ConnectionError', (error) => {
-  console.error('Event: Connection error:', error);
-});
+/**
+ * Default source name for the video capture device
+ */
+const DEFAULT_SOURCE_NAME = '视频采集设备'; // "Video Capture Device" in Chinese
 
 /**
  * Get the appropriate input kind for video capture devices based on the OS
@@ -265,46 +244,33 @@ async function getAvailableColorRanges(inputName) {
 }
 
 /**
- * Main function to manage video capture devices
+ * Manage video capture devices in OBS
+ * @param {Object} options - Configuration options
+ * @param {string} options.sourceName - Source name for the video capture device (optional)
+ * @param {Object} options.obs - OBS WebSocket client (optional)
+ * @param {Object} options.deviceSettings - Device settings (optional)
+ * @param {string} options.deviceSettings.resolution - Preferred resolution (optional)
+ * @param {number} options.deviceSettings.fps - Preferred FPS (optional)
+ * @param {string} options.deviceSettings.videoFormat - Preferred video format (optional)
+ * @param {string} options.deviceSettings.colorSpace - Preferred color space (optional)
+ * @param {string} options.deviceSettings.colorRange - Preferred color range (optional)
+ * @returns {Promise<Object>} Result of the operation
  */
-async function manageVideoCaptureDevice() {
+async function manageVideoCaptureDevice(options = {}) {
+  // Set default options
+  const {
+    sourceName = DEFAULT_SOURCE_NAME,
+    obs = getOBSWebSocketClient(), // Use the shared client by default
+    deviceSettings = {}
+  } = options;
+
   try {
-    // Connect to OBS WebSocket with timeout
-    console.log('Connecting to OBS WebSocket...');
-    console.log(`Address: ${connectionParams.address}`);
-    console.log(`Password: ${connectionParams.password ? '(set)' : '(not set)'}`);
-
-    try {
-      // Create a promise that rejects after a timeout
-      const connectPromise = obs.connect(connectionParams.address, connectionParams.password);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000);
-      });
-
-      // Race the connection against the timeout
-      await Promise.race([connectPromise, timeoutPromise]);
-
-      console.log('Successfully connected to OBS WebSocket!');
-    } catch (connectionError) {
-      // If connection with password fails, try without password
-      if (connectionError.message.includes('Authentication')) {
-        console.log('Authentication failed. Trying to connect without password...');
-
-        // Create a new promise that rejects after a timeout
-        const connectPromiseNoPassword = obs.connect(connectionParams.address);
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000);
-        });
-
-        // Race the connection against the timeout
-        await Promise.race([connectPromiseNoPassword, timeoutPromise]);
-
-        console.log('Successfully connected to OBS WebSocket without password!');
-      } else {
-        // Re-throw the error if it's not an authentication error
-        throw connectionError;
-      }
+    // Check if the client is connected
+    if (!obs.identified) {
+      throw new Error('OBS WebSocket client is not connected');
     }
+
+    console.log('Using existing OBS WebSocket connection');
 
     // Get OBS version
     const { obsVersion } = await obs.call('GetVersion');
@@ -762,6 +728,12 @@ async function manageVideoCaptureDevice() {
       }
     }
 
+    // Return success result with device information
+    return {
+      success: true,
+      sourceName,
+      message: 'Video capture device configured successfully'
+    };
   } catch (error) {
     console.error('\n--- ERROR ---');
     console.error(`Error message: ${error.message}`);
@@ -786,14 +758,32 @@ async function manageVideoCaptureDevice() {
     console.log('4. Verify that the password is correct (or try with no password)');
     console.log('5. Check if there are any firewall issues blocking the connection');
     console.log('6. Try restarting OBS');
-  } finally {
-    // Disconnect from OBS WebSocket
-    if (obs.identified) {
-      await obs.disconnect();
-      console.log('\nDisconnected from OBS WebSocket.');
-    }
+
+    // Return error result
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to configure video capture device'
+    };
   }
+  // We don't disconnect here since we're using a shared client
 }
 
-// Run the main function
-manageVideoCaptureDevice();
+/**
+ * Simple function to add a video capture device with default settings
+ * @param {Object} obs - OBS WebSocket client (optional)
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function addDefaultVideoCaptureDevice(obs = getOBSWebSocketClient()) {
+  return manageVideoCaptureDevice({ obs });
+}
+
+// Export functions
+export {
+  manageVideoCaptureDevice,
+  addDefaultVideoCaptureDevice,
+  getVideoCaptureInputKind,
+  getBasicSystemInfo,
+  identifyCaptureCard,
+  DEFAULT_SOURCE_NAME
+};

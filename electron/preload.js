@@ -17,6 +17,17 @@ contextBridge.exposeInMainWorld('electron', {
   startOBSStreaming: () => ipcRenderer.invoke('start-obs-streaming'),
   stopOBSStreaming: () => ipcRenderer.invoke('stop-obs-streaming'),
 
+  // OBS 配置相关功能
+  checkInstallFonts: () => ipcRenderer.invoke('check-install-fonts'),
+  installFonts: () => ipcRenderer.invoke('install-fonts'),
+  restartObs: () => ipcRenderer.invoke('restart-obs'),
+  connectToObs: () => ipcRenderer.invoke('connect-to-obs'),
+  configureObsProfile: (options) => ipcRenderer.invoke('configure-obs-profile', options),
+  addObsAudioSources: () => ipcRenderer.invoke('add-obs-audio-sources'),
+  addObsVideoDevice: () => ipcRenderer.invoke('add-obs-video-device'),
+  oneClickConfigureObs: (options) => ipcRenderer.invoke('one-click-configure-obs', options),
+  configureObsUnified: (options) => ipcRenderer.invoke('configure-obs-unified', options),
+
   // 直播平台相关功能
   getDouyinCompanionInfo: () => ipcRenderer.invoke('get-douyin-companion-info'),
   getDouyinApiInfo: (token, method) => ipcRenderer.invoke('get-douyin-api-info', { token, method }),

@@ -4,14 +4,14 @@
  * This script finds OBS configuration backups, extracts them, and restores them to OBS.
  */
 
-// Use CommonJS require instead of ES modules for better compatibility
-const OBSWebSocket = require('obs-websocket-js').default;
-const fs = require('fs-extra');
-const path = require('path');
-const ini = require('ini');
-const winston = require('winston');
-const os = require('os');
-const { findBackupZipFiles, extractZipArchive } = require('./utils/zip-utils.js');
+// Using ES modules
+import OBSWebSocket from 'obs-websocket-js';
+import fs from 'fs-extra';
+import path from 'path';
+import ini from 'ini';
+import winston from 'winston';
+import os from 'os';
+import { findBackupZipFiles, extractZipArchive } from './utils/zip-utils.js';
 
 // Configure logger
 const logger = winston.createLogger({
@@ -28,7 +28,11 @@ const logger = winston.createLogger({
   ]
 });
 
-// __dirname is already available in CommonJS
+// Get __dirname equivalent in ES modules
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Connection parameters
 const connectionParams = {
@@ -312,10 +316,12 @@ async function restoreOBSConfiguration(zipFilePath) {
 }
 
 // Run the restore function if this file is executed directly
-if (require.main === module) {
+// In ES modules, this is the equivalent of checking if the file is the main module
+if (import.meta.url === `file://${process.argv[1]}`) {
   // Check if a specific backup file was specified
   const specifiedBackupPath = process.argv[2];
   restoreOBSConfiguration(specifiedBackupPath);
 }
 
-module.exports = restoreOBSConfiguration;
+// Export the restore function
+export default restoreOBSConfiguration;

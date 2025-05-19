@@ -6,6 +6,7 @@ import os from 'os';
 import { exec } from 'child_process';
 import OBSWebSocket from 'obs-websocket-js';
 import { getSoftwarePath } from '../utils/Findsoftpaths.js';
+import { getOBSWebSocketClient } from './obsset_modules/obsWebSocketClient.js';
 
 // 将回调函数转换为 Promise
 const fsReadFile = promisify(fs.readFile);
@@ -132,8 +133,27 @@ async function ensureAndConnectToOBS(address = '', password = '') {
 
     // 尝试连接到 OBS WebSocket 服务器
     // 如果没有指定地址，使用配置中的端口
-    const serverPort = address.includes(':') ? address.split(':')[1] : obsWebSocketConfig.server_port;
-    const serverAddress = address.includes(':') ? address.split(':')[0] : 'localhost';
+    let serverPort, serverAddress;
+
+    if (address) {
+      // 如果提供了地址，解析它
+      if (address.includes(':')) {
+        // 如果地址包含冒号，分割地址和端口
+        [serverAddress, serverPort] = address.split(':');
+      } else {
+        // 如果地址不包含冒号，假设它是地址部分，使用配置中的端口
+        serverAddress = address;
+        serverPort = obsWebSocketConfig.server_port;
+      }
+    } else {
+      // 如果没有提供地址，使用默认值
+      serverAddress = 'localhost';
+      serverPort = obsWebSocketConfig.server_port;
+    }
+
+    // 确保地址不包含 'ws://' 前缀
+    serverAddress = serverAddress.replace(/^ws:\/\//, '');
+
     const fullAddress = `${serverAddress}:${serverPort}`;
 
     // 如果没有指定密码，使用配置中的密码
@@ -160,8 +180,8 @@ async function ensureAndConnectToOBS(address = '', password = '') {
       }
     }
 
-    // 创建新的 OBS WebSocket 实例
-    obsWebSocket = new OBSWebSocket();
+    // 使用共享的 OBS WebSocket 客户端
+    obsWebSocket = getOBSWebSocketClient();
 
     try {
       // 简单直接的连接方式
@@ -306,13 +326,42 @@ async function setOBSStreamSettings(streamUrl, streamKey) {
   try {
     console.log(`正在设置 OBS 推流参数 URL: ${streamUrl}, Key: ${streamKey ? '******' : 'none'}`);
 
-    // 检查是否已连接
+    // 检查是否已连接，如果未连接则尝试重连最多10次
     if (!obsWebSocket) {
-      console.error('未连接到 OBS WebSocket 服务器');
-      return {
-        success: false,
-        message: '未连接到 OBS WebSocket 服务器，请先连接'
-      };
+      console.log('未连接到 OBS WebSocket 服务器，开始尝试连接...');
+
+      let connected = false;
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (!connected && attempts < maxAttempts) {
+        attempts++;
+        console.log(`尝试连接 OBS WebSocket 服务器 (第 ${attempts}/${maxAttempts} 次)`);
+
+        try {
+          const connectResult = await ensureAndConnectToOBS();
+          if (connectResult.success) {
+            console.log(`第 ${attempts} 次尝试连接成功`);
+            connected = true;
+          } else {
+            console.log(`第 ${attempts} 次尝试连接失败: ${connectResult.message}`);
+            // 等待一秒后重试
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (connectError) {
+          console.error(`第 ${attempts} 次尝试连接出错:`, connectError);
+          // 等待一秒后重试
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (!connected) {
+        console.error(`尝试连接 OBS WebSocket 服务器失败，已重试 ${maxAttempts} 次`);
+        return {
+          success: false,
+          message: `未能连接到 OBS WebSocket 服务器，已重试 ${maxAttempts} 次`
+        };
+      }
     }
 
     // 设置推流服务为自定义

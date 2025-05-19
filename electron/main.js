@@ -10,6 +10,7 @@ import { getSoftwareVersion } from './utils/Findsoftpaths.js';
 import { loginDouyinWeb } from './modules/douyinWebLogin.js';
 import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
 import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
+import { registerOBSConfigHandlers } from './modules/obsConfigHandlers.js';
 import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
 import { initializePaths } from './utils/pathManager.js';
 import { initUpdateChecker } from '../build/update-checker.js';
@@ -122,8 +123,8 @@ function createWindow() {
         return false;
       };
 
-      // 尝试端口 5173 和 5174
-      tryLoadURL([5173, 5174]).then(success => {
+      // 尝试端口 5174 和 5175
+      tryLoadURL([5174, 5175]).then(success => {
         if (!success) {
           console.error('无法加载任何开发服务器 URL');
         }
@@ -247,6 +248,9 @@ app.whenReady().then(async () => {
 
   // 注册 OBS WebSocket 相关的 IPC 处理函数
   registerOBSWebSocketHandlers(ipcMain);
+
+  // 注册 OBS 配置相关的 IPC 处理函数
+  registerOBSConfigHandlers(ipcMain);
 
   // 直播平台相关功能
   ipcMain.handle('get-douyin-companion-info', async () => {

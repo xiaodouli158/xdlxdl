@@ -12,13 +12,25 @@ function ObsConfigPage() {
   const [customResolution, setCustomResolution] = useState('1920x1080');
   const [customName, setCustomName] = useState('自定义设备');
 
+  // OBS配置状态
+  const [configStatus, setConfigStatus] = useState('idle'); // 'idle', 'configuring', 'success', 'error'
+  const [configMessage, setConfigMessage] = useState('');
+  const [configError, setConfigError] = useState('');
+  const [configSteps, setConfigSteps] = useState([]);
+
   // 初始化选择第一个设备
   useEffect(() => {
+    // 重置所有选择框
+    setAppleiPadResolution('');
+    setAndroidTabletResolution('');
+    setApplePhoneResolution('');
+    setAndroidPhoneResolution('');
+
     if (deviceType === 'tablet' && tabletModels.length > 0) {
       const appleDevice = tabletModels.find(d => d.brand === 'Apple');
       if (appleDevice) {
         setSelectedDevice(appleDevice);
-        setAppleiPadResolution(appleDevice.resolution);
+        setAppleiPadResolution(appleDevice.id); // 使用ID而不是分辨率
       } else {
         setSelectedDevice(tabletModels[0]);
       }
@@ -28,10 +40,10 @@ function ObsConfigPage() {
 
       if (applePhone) {
         setSelectedDevice(applePhone);
-        setApplePhoneResolution(applePhone.resolution);
+        setApplePhoneResolution(applePhone.id); // 使用ID而不是分辨率
       } else if (androidPhone) {
         setSelectedDevice(androidPhone);
-        setAndroidPhoneResolution(androidPhone.resolution);
+        setAndroidPhoneResolution(androidPhone.id); // 使用ID而不是分辨率
       } else {
         setSelectedDevice(phoneModels[0]);
       }
@@ -52,7 +64,12 @@ function ObsConfigPage() {
       };
       setSelectedDevice(customDevice);
     }
+
+    // 添加日志，帮助调试
+    console.log('设备类型变更:', deviceType);
   }, [deviceType, customName, customResolution]);
+
+
 
   // 从分辨率字符串计算宽高比
   const getAspectRatioFromResolution = (resolution) => {
@@ -70,80 +87,160 @@ function ObsConfigPage() {
     return '16:9'; // 默认宽高比
   };
 
+  // 配置OBS的函数
+  const configureOBS = async () => {
+    if (!selectedDevice) {
+      setConfigStatus('error');
+      setConfigError('请先选择一个设备');
+      setConfigMessage('配置失败：未选择设备');
+      return;
+    }
+
+    try {
+      // 重置状态
+      setConfigStatus('configuring');
+      setConfigMessage('正在配置OBS...');
+      setConfigError('');
+
+      // 清空配置步骤
+      setConfigSteps([]);
+
+      // 使用一键配置OBS功能
+      const result = await window.electron.oneClickConfigureObs({
+        deviceName: selectedDevice.name,
+        resolution: selectedDevice.resolution
+      });
+
+      console.log('一键配置OBS结果:', result);
+
+      // 处理配置结果
+      if (result.success) {
+        // 配置成功
+        setConfigStatus('success');
+        setConfigMessage('OBS配置完成！');
+
+        // 更新配置步骤
+        if (result.steps && Array.isArray(result.steps)) {
+          setConfigSteps(result.steps);
+        }
+
+        // 3秒后重置状态
+        setTimeout(() => {
+          setConfigStatus('idle');
+          setConfigMessage('');
+        }, 3000);
+      } else {
+        // 配置失败
+        if (result.steps && Array.isArray(result.steps)) {
+          setConfigSteps(result.steps);
+        }
+        throw new Error(result.message || '配置OBS失败');
+      }
+    } catch (error) {
+      console.error('OBS配置错误:', error);
+      setConfigStatus('error');
+      setConfigError(error.message || '未知错误');
+      setConfigMessage('配置失败，请查看错误信息');
+    }
+  };
 
 
-  // 获取Apple iPad分辨率选项
-  const getAppleiPadResolutions = () => {
+
+  // 获取Apple iPad选项
+  const getAppleiPadOptions = () => {
     const appleDevices = tabletModels.filter(device => device.brand === 'Apple');
     return appleDevices.map(device => ({
-      value: device.resolution,
+      value: device.id,
       label: `${device.name} - ${device.resolution}`
     }));
   };
 
-  // 获取Android平板分辨率选项
-  const getAndroidTabletResolutions = () => {
+  // 获取Android平板选项
+  const getAndroidTabletOptions = () => {
     const androidDevices = tabletModels.filter(device => device.brand !== 'Apple');
     return androidDevices.map(device => ({
-      value: device.resolution,
+      value: device.id,
       label: `${device.name} - ${device.resolution}`
     }));
   };
 
-  // 获取Apple手机分辨率选项
-  const getApplePhoneResolutions = () => {
+  // 获取Apple手机选项
+  const getApplePhoneOptions = () => {
     const appleDevices = phoneModels.filter(device => device.brand === 'Apple');
     return appleDevices.map(device => ({
-      value: device.resolution,
+      value: device.id,
       label: `${device.name} - ${device.resolution}`
     }));
   };
 
-  // 获取Android手机分辨率选项
-  const getAndroidPhoneResolutions = () => {
+  // 获取Android手机选项
+  const getAndroidPhoneOptions = () => {
     const androidDevices = phoneModels.filter(device => device.brand !== 'Apple');
     return androidDevices.map(device => ({
-      value: device.resolution,
+      value: device.id,
       label: `${device.name} - ${device.resolution}`
     }));
   };
 
   // 处理机型选择
-  const handleResolutionSelect = (resolution, type) => {
-    let device;
-
-    // 重置所有选择框，然后只设置当前选择的值
-    if (type === 'apple-tablet') {
-      setAndroidTabletResolution(''); // 重置另一个选择框
-      setApplePhoneResolution('');
-      setAndroidPhoneResolution('');
-
-      device = tabletModels.find(d => d.brand === 'Apple' && d.resolution === resolution);
-      setAppleiPadResolution(resolution);
-    } else if (type === 'android-tablet') {
-      setAppleiPadResolution(''); // 重置另一个选择框
-      setApplePhoneResolution('');
-      setAndroidPhoneResolution('');
-
-      device = tabletModels.find(d => d.brand !== 'Apple' && d.resolution === resolution);
-      setAndroidTabletResolution(resolution);
-    } else if (type === 'apple-phone') {
-      setAppleiPadResolution(''); // 重置平板选择框
-      setAndroidTabletResolution('');
-      setAndroidPhoneResolution(''); // 重置另一个手机选择框
-
-      device = phoneModels.find(d => d.brand === 'Apple' && d.resolution === resolution);
-      setApplePhoneResolution(resolution);
-    } else if (type === 'android-phone') {
-      setAppleiPadResolution(''); // 重置平板选择框
-      setAndroidTabletResolution('');
-      setApplePhoneResolution(''); // 重置另一个手机选择框
-
-      device = phoneModels.find(d => d.brand !== 'Apple' && d.resolution === resolution);
-      setAndroidPhoneResolution(resolution);
+  const handleDeviceSelect = (deviceId, type) => {
+    // 如果选择了空值，则不执行任何操作
+    if (!deviceId) {
+      return;
     }
 
+    let device;
+
+    // 根据设备类型和ID查找设备
+    if (type === 'apple-tablet') {
+      // 重置其他选择框
+      setAndroidTabletResolution('');
+      setApplePhoneResolution('');
+      setAndroidPhoneResolution('');
+
+      // 根据ID查找设备
+      device = tabletModels.find(d => d.id === deviceId);
+      if (device) {
+        setAppleiPadResolution(deviceId);
+      }
+    } else if (type === 'android-tablet') {
+      // 重置其他选择框
+      setAppleiPadResolution('');
+      setApplePhoneResolution('');
+      setAndroidPhoneResolution('');
+
+      // 根据ID查找设备
+      device = tabletModels.find(d => d.id === deviceId);
+      if (device) {
+        setAndroidTabletResolution(deviceId);
+      }
+    } else if (type === 'apple-phone') {
+      // 重置其他选择框
+      setAppleiPadResolution('');
+      setAndroidTabletResolution('');
+      setAndroidPhoneResolution('');
+
+      // 根据ID查找设备
+      device = phoneModels.find(d => d.id === deviceId);
+      if (device) {
+        setApplePhoneResolution(deviceId);
+      }
+    } else if (type === 'android-phone') {
+      // 重置其他选择框
+      setAppleiPadResolution('');
+      setAndroidTabletResolution('');
+      setApplePhoneResolution('');
+
+      // 根据ID查找设备
+      device = phoneModels.find(d => d.id === deviceId);
+      if (device) {
+        setAndroidPhoneResolution(deviceId);
+      }
+    }
+
+    // 设置选中的设备
     if (device) {
+      console.log('选中设备:', device);
       setSelectedDevice(device);
     }
   };
@@ -243,10 +340,10 @@ function ObsConfigPage() {
                 <select
                   className="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={appleiPadResolution}
-                  onChange={(e) => handleResolutionSelect(e.target.value, 'apple-tablet')}
+                  onChange={(e) => handleDeviceSelect(e.target.value, 'apple-tablet')}
                 >
                   <option value="">请选择机型</option>
-                  {getAppleiPadResolutions().map((option) => (
+                  {getAppleiPadOptions().map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -258,10 +355,10 @@ function ObsConfigPage() {
                 <select
                   className="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={androidTabletResolution}
-                  onChange={(e) => handleResolutionSelect(e.target.value, 'android-tablet')}
+                  onChange={(e) => handleDeviceSelect(e.target.value, 'android-tablet')}
                 >
                   <option value="">请选择机型</option>
-                  {getAndroidTabletResolutions().map((option) => (
+                  {getAndroidTabletOptions().map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -410,10 +507,10 @@ function ObsConfigPage() {
                 <select
                   className="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={applePhoneResolution}
-                  onChange={(e) => handleResolutionSelect(e.target.value, 'apple-phone')}
+                  onChange={(e) => handleDeviceSelect(e.target.value, 'apple-phone')}
                 >
                   <option value="">请选择机型</option>
-                  {getApplePhoneResolutions().map((option) => (
+                  {getApplePhoneOptions().map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -425,10 +522,10 @@ function ObsConfigPage() {
                 <select
                   className="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={androidPhoneResolution}
-                  onChange={(e) => handleResolutionSelect(e.target.value, 'android-phone')}
+                  onChange={(e) => handleDeviceSelect(e.target.value, 'android-phone')}
                 >
                   <option value="">请选择机型</option>
-                  {getAndroidPhoneResolutions().map((option) => (
+                  {getAndroidPhoneOptions().map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -482,19 +579,82 @@ function ObsConfigPage() {
               <p className="text-gray-300 text-sm mb-3">
                 根据已选设备自动配置OBS场景、来源和设置，优化直播效果。
               </p>
-              <div className="flex justify-center">
+              <div className="flex flex-col items-center">
                 <button
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors flex items-center"
-                  onClick={() => {
-                    // 一键配置OBS的逻辑
-                    alert('开始配置OBS...');
-                  }}
+                  className={`px-6 py-2 ${configStatus === 'idle' || configStatus === 'success' ? 'bg-indigo-600 hover:bg-indigo-700' : configStatus === 'error' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 cursor-not-allowed'} text-white rounded-md transition-colors flex items-center`}
+                  onClick={configureOBS}
+                  disabled={configStatus !== 'idle' && configStatus !== 'success' && configStatus !== 'error'}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-                  </svg>
-                  一键配置OBS
+                  {configStatus === 'idle' || configStatus === 'success' ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                      </svg>
+                      一键配置OBS
+                    </>
+                  ) : configStatus === 'error' ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      重试配置
+                    </>
+                  ) : (
+                    <>
+                      <svg className="animate-spin h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      配置中...
+                    </>
+                  )}
                 </button>
+
+                {/* 状态信息显示 */}
+                {configStatus !== 'idle' && (
+                  <div className={`mt-3 text-sm ${configStatus === 'error' ? 'text-red-400' : configStatus === 'success' ? 'text-green-400' : 'text-gray-300'}`}>
+                    {configMessage}
+                    {configStatus === 'error' && configError && (
+                      <div className="text-red-400 mt-1">
+                        错误: {configError}
+                      </div>
+                    )}
+
+                    {/* 配置步骤显示 */}
+                    {configSteps.length > 0 && (
+                      <div className="mt-3 border border-gray-700 rounded-md p-2 bg-gray-800/50">
+                        <h4 className="text-xs font-medium text-gray-400 mb-2">配置步骤:</h4>
+                        <ul className="space-y-1">
+                          {configSteps.map((step, index) => (
+                            <li key={index} className="flex items-start">
+                              <span className={`inline-block w-4 h-4 mr-2 rounded-full flex-shrink-0 mt-0.5 ${
+                                step.success ? 'bg-green-500' : 'bg-red-500'
+                              }`}>
+                                {step.success ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-white">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-white">
+                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </span>
+                              <div>
+                                <span className={`text-xs ${step.success ? 'text-green-400' : 'text-red-400'}`}>
+                                  {step.name || `步骤 ${index + 1}`}
+                                </span>
+                                {step.message && (
+                                  <p className="text-xs text-gray-400 mt-0.5">{step.message}</p>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

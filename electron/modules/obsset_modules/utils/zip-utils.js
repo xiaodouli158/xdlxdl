@@ -2,13 +2,13 @@
  * Zip utilities for OBS configuration backup and restore
  */
 
-const fs = require('fs-extra');
-const path = require('path');
-const { createWriteStream } = require('fs');
-const { createGzip } = require('zlib');
-const archiver = require('archiver');
-const extract = require('extract-zip');
-const winston = require('winston');
+import fs from 'fs-extra';
+import path from 'path';
+import { createWriteStream } from 'fs';
+import { createGzip } from 'zlib';
+import archiver from 'archiver';
+import extract from 'extract-zip';
+import winston from 'winston';
 
 // Configure logger
 const logger = winston.createLogger({
@@ -127,7 +127,7 @@ async function findBackupZipFiles() {
   }
 }
 
-module.exports = {
+export {
   createZipArchive,
   extractZipArchive,
   findBackupZipFiles

@@ -14,7 +14,7 @@ export default function App() {
     <Routes>
       {/* 重定向根路径到 /app */}
       <Route path="/" element={<Navigate to="/app" replace />} />
-      
+
       {/* 主应用路由 */}
       <Route path="/app" element={<MainLayout />}>
         <Route index element={<HomePage />} />

@@ -1,7 +1,7 @@
 /**
- * Font Installation Utility (Skip Existing Version)
+ * Font Installation Utility
  *
- * This script installs fonts using direct Windows API calls through PowerShell.
+ * This module provides functions to install fonts using direct Windows API calls through PowerShell.
  * It skips fonts that are already installed to avoid unnecessary reinstallation.
  * Requires administrator privileges to run properly.
  */
@@ -11,73 +11,92 @@ import path from 'path';
 import { execSync } from 'child_process';
 import os from 'os';
 
-// Check if running on Windows
-if (os.platform() !== 'win32') {
-  console.error('Error: This script only works on Windows operating systems.');
-  process.exit(1);
-}
-
-// Check if running as administrator
-try {
-  execSync('net session >nul 2>&1', { windowsHide: true });
-} catch (error) {
-  console.error('Error: This script requires administrator privileges.');
-  console.error('Please run this script as administrator.');
-  process.exit(1);
-}
-
-// Get the path argument
-const fontPath = process.argv[2];
-
-if (!fontPath) {
-  console.error('Error: No path specified.');
-  console.log('\nUsage:');
-  console.log('  node install-fonts-skip.js <path>');
-  console.log('\nWhere <path> is a path to a font file or directory containing font files.');
-  process.exit(1);
-}
-
-// Check if path exists
-if (!fs.existsSync(fontPath)) {
-  console.error(`Error: Path not found: ${fontPath}`);
-  process.exit(1);
-}
-
-// Check if path is a file or directory
-const stats = fs.statSync(fontPath);
-let fontFiles = [];
-
-if (stats.isFile()) {
-  // Check if file is a font file
-  const ext = path.extname(fontPath).toLowerCase();
-  if (ext !== '.ttf' && ext !== '.otf') {
-    console.error(`Error: File is not a supported font type: ${fontPath}`);
-    process.exit(1);
+/**
+ * Check if the script is running with administrator privileges
+ * @returns {boolean} True if running as administrator, false otherwise
+ */
+function isRunningAsAdmin() {
+  if (os.platform() !== 'win32') {
+    return false;
   }
-  fontFiles.push(fontPath);
-} else if (stats.isDirectory()) {
-  // Get all font files in the directory
-  const files = fs.readdirSync(fontPath);
-  fontFiles = files
-    .filter(file => {
-      const ext = path.extname(file).toLowerCase();
-      return ext === '.ttf' || ext === '.otf';
-    })
-    .map(file => path.join(fontPath, file));
 
-  if (fontFiles.length === 0) {
-    console.error(`Error: No font files found in directory: ${fontPath}`);
-    process.exit(1);
+  try {
+    execSync('net session >nul 2>&1', { windowsHide: true });
+    return true;
+  } catch (error) {
+    return false;
   }
-} else {
-  console.error(`Error: Invalid path type: ${fontPath}`);
-  process.exit(1);
 }
 
-console.log(`Found ${fontFiles.length} font file(s) to process.`);
+/**
+ * Get font files from a path
+ * @param {string} fontPath - Path to a font file or directory containing font files
+ * @returns {Object} Object containing font files and any errors
+ */
+function getFontFiles(fontPath) {
+  // Check if path exists
+  if (!fs.existsSync(fontPath)) {
+    return {
+      success: false,
+      error: `Path not found: ${fontPath}`,
+      fontFiles: []
+    };
+  }
 
-// Create a PowerShell script to install the fonts
-const psScript = `
+  // Check if path is a file or directory
+  const stats = fs.statSync(fontPath);
+  let fontFiles = [];
+
+  if (stats.isFile()) {
+    // Check if file is a font file
+    const ext = path.extname(fontPath).toLowerCase();
+    if (ext !== '.ttf' && ext !== '.otf') {
+      return {
+        success: false,
+        error: `File is not a supported font type: ${fontPath}`,
+        fontFiles: []
+      };
+    }
+    fontFiles.push(fontPath);
+  } else if (stats.isDirectory()) {
+    // Get all font files in the directory
+    const files = fs.readdirSync(fontPath);
+    fontFiles = files
+      .filter(file => {
+        const ext = path.extname(file).toLowerCase();
+        return ext === '.ttf' || ext === '.otf';
+      })
+      .map(file => path.join(fontPath, file));
+
+    if (fontFiles.length === 0) {
+      return {
+        success: false,
+        error: `No font files found in directory: ${fontPath}`,
+        fontFiles: []
+      };
+    }
+  } else {
+    return {
+      success: false,
+      error: `Invalid path type: ${fontPath}`,
+      fontFiles: []
+    };
+  }
+
+  return {
+    success: true,
+    fontFiles,
+    count: fontFiles.length
+  };
+}
+
+/**
+ * Create a PowerShell script to install fonts
+ * @param {Array<string>} fontFiles - Array of font file paths
+ * @returns {string} PowerShell script
+ */
+function createPowerShellScript(fontFiles) {
+  return `
 # Font installation script
 
 # Windows API functions for font installation
@@ -214,50 +233,265 @@ return @{
     Failed = $failedCount;
 } | ConvertTo-Json;
 `;
-
-// Save the PowerShell script to a temporary file
-const tempScriptPath = path.join(os.tmpdir(), 'install-fonts-skip.ps1');
-fs.writeFileSync(tempScriptPath, psScript);
-
-// Run the PowerShell script with administrator privileges
-try {
-  console.log('Processing fonts...');
-  const result = execSync(`powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`, {
-    windowsHide: true,
-    encoding: 'utf8'
-  });
-
-  console.log(result);
-
-  // Parse the JSON result if available
-  try {
-    const jsonStartIndex = result.lastIndexOf('{');
-    const jsonEndIndex = result.lastIndexOf('}') + 1;
-    if (jsonStartIndex >= 0 && jsonEndIndex > jsonStartIndex) {
-      const jsonStr = result.substring(jsonStartIndex, jsonEndIndex);
-      const stats = JSON.parse(jsonStr);
-
-      console.log('\nFont processing summary:');
-      console.log(`  Total fonts: ${stats.Total}`);
-      console.log(`  Newly installed: ${stats.Installed}`);
-      console.log(`  Skipped (already installed): ${stats.Skipped}`);
-      console.log(`  Failed: ${stats.Failed}`);
-    }
-  } catch (parseError) {
-    // Ignore JSON parsing errors
-  }
-
-  // Clean up
-  fs.unlinkSync(tempScriptPath);
-
-  console.log('\nFont processing completed.');
-} catch (error) {
-  console.error(`Error running PowerShell script: ${error.message}`);
-
-  // Clean up
-  if (fs.existsSync(tempScriptPath)) {
-    fs.unlinkSync(tempScriptPath);
-  }
-
-  process.exit(1);
 }
+
+/**
+ * Install fonts from a path
+ * @param {string} fontPath - Path to a font file or directory containing font files
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function installFonts(fontPath) {
+  // Check if running on Windows
+  if (os.platform() !== 'win32') {
+    return {
+      success: false,
+      error: 'This function only works on Windows operating systems.'
+    };
+  }
+
+  // Check if running as administrator
+  if (!isRunningAsAdmin()) {
+    return {
+      success: false,
+      error: 'This function requires administrator privileges.'
+    };
+  }
+
+  // Get font files
+  const fontFilesResult = getFontFiles(fontPath);
+  if (!fontFilesResult.success) {
+    return {
+      success: false,
+      error: fontFilesResult.error
+    };
+  }
+
+  const fontFiles = fontFilesResult.fontFiles;
+  console.log(`Found ${fontFiles.length} font file(s) to process.`);
+
+  // Create PowerShell script
+  const psScript = createPowerShellScript(fontFiles);
+
+  // Save the PowerShell script to a temporary file
+  const tempScriptPath = path.join(os.tmpdir(), 'install-fonts-skip.ps1');
+  fs.writeFileSync(tempScriptPath, psScript);
+
+  try {
+    console.log('Processing fonts...');
+    const result = execSync(`powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`, {
+      windowsHide: true,
+      encoding: 'utf8'
+    });
+
+    console.log(result);
+
+    // Parse the JSON result if available
+    try {
+      const jsonStartIndex = result.lastIndexOf('{');
+      const jsonEndIndex = result.lastIndexOf('}') + 1;
+      if (jsonStartIndex >= 0 && jsonEndIndex > jsonStartIndex) {
+        const jsonStr = result.substring(jsonStartIndex, jsonEndIndex);
+        const stats = JSON.parse(jsonStr);
+
+        console.log('\nFont processing summary:');
+        console.log(`  Total fonts: ${stats.Total}`);
+        console.log(`  Newly installed: ${stats.Installed}`);
+        console.log(`  Skipped (already installed): ${stats.Skipped}`);
+        console.log(`  Failed: ${stats.Failed}`);
+
+        // Clean up
+        fs.unlinkSync(tempScriptPath);
+
+        return {
+          success: true,
+          total: stats.Total,
+          installed: stats.Installed,
+          skipped: stats.Skipped,
+          failed: stats.Failed,
+          message: 'Font processing completed.'
+        };
+      }
+    } catch (parseError) {
+      // Ignore JSON parsing errors
+    }
+
+    // Clean up
+    fs.unlinkSync(tempScriptPath);
+
+    return {
+      success: true,
+      message: 'Font processing completed, but could not parse detailed results.'
+    };
+  } catch (error) {
+    console.error(`Error running PowerShell script: ${error.message}`);
+
+    // Clean up
+    if (fs.existsSync(tempScriptPath)) {
+      fs.unlinkSync(tempScriptPath);
+    }
+
+    return {
+      success: false,
+      error: `Error running PowerShell script: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Check if fonts are installed
+ * @param {string} fontPath - Path to a font file or directory containing font files
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function checkFontsInstalled(fontPath) {
+  // Check if running on Windows
+  if (os.platform() !== 'win32') {
+    return {
+      success: false,
+      error: 'This function only works on Windows operating systems.'
+    };
+  }
+
+  // Get font files
+  const fontFilesResult = getFontFiles(fontPath);
+  if (!fontFilesResult.success) {
+    return {
+      success: false,
+      error: fontFilesResult.error
+    };
+  }
+
+  const fontFiles = fontFilesResult.fontFiles;
+  console.log(`Found ${fontFiles.length} font file(s) to check.`);
+
+  // Create a simple PowerShell script to check if fonts are installed
+  const checkScript = `
+$fontsFolder = [System.IO.Path]::Combine($env:windir, "Fonts");
+$registryPath = "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
+
+function Test-FontInstalled {
+    param (
+        [string]$fontFilename
+    )
+
+    # Check if the font file exists in the Windows Fonts folder
+    $fontPath = [System.IO.Path]::Combine($fontsFolder, $fontFilename);
+    if (!(Test-Path $fontPath)) {
+        return $false;
+    }
+
+    # Get font name for registry check
+    $fontName = [System.IO.Path]::GetFileNameWithoutExtension($fontFilename);
+    $fontExt = [System.IO.Path]::GetExtension($fontFilename).ToLower();
+
+    if ($fontExt -eq ".ttf") {
+        $fontName = "$fontName (TrueType)";
+    } elseif ($fontExt -eq ".otf") {
+        $fontName = "$fontName (OpenType)";
+    }
+
+    # Check if the font is registered in the registry
+    $fontRegistered = Get-ItemProperty -Path $registryPath -Name $fontName -ErrorAction SilentlyContinue;
+
+    return ($fontRegistered -ne $null);
+}
+
+$results = @{
+    Total = ${fontFiles.length};
+    Installed = 0;
+    NotInstalled = 0;
+    FontStatus = @{};
+}
+
+${fontFiles.map(file => `
+$fontFilename = [System.IO.Path]::GetFileName("${file.replace(/\\/g, '\\\\')}");
+$isInstalled = Test-FontInstalled -fontFilename $fontFilename;
+$results.FontStatus["$fontFilename"] = $isInstalled;
+if ($isInstalled) {
+    $results.Installed++;
+} else {
+    $results.NotInstalled++;
+}
+`).join('\n')}
+
+return $results | ConvertTo-Json;
+`;
+
+  // Save the PowerShell script to a temporary file
+  const tempScriptPath = path.join(os.tmpdir(), 'check-fonts.ps1');
+  fs.writeFileSync(tempScriptPath, checkScript);
+
+  try {
+    console.log('Checking fonts...');
+    const result = execSync(`powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`, {
+      windowsHide: true,
+      encoding: 'utf8'
+    });
+
+    // Clean up
+    fs.unlinkSync(tempScriptPath);
+
+    try {
+      const stats = JSON.parse(result);
+
+      return {
+        success: true,
+        total: stats.Total,
+        installed: stats.Installed,
+        notInstalled: stats.NotInstalled,
+        fontStatus: stats.FontStatus,
+        needsInstall: stats.NotInstalled > 0
+      };
+    } catch (parseError) {
+      return {
+        success: false,
+        error: `Error parsing PowerShell output: ${parseError.message}`
+      };
+    }
+  } catch (error) {
+    console.error(`Error running PowerShell script: ${error.message}`);
+
+    // Clean up
+    if (fs.existsSync(tempScriptPath)) {
+      fs.unlinkSync(tempScriptPath);
+    }
+
+    return {
+      success: false,
+      error: `Error running PowerShell script: ${error.message}`
+    };
+  }
+}
+
+// Handle command line arguments if script is run directly
+import { fileURLToPath } from 'url';
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const fontPath = process.argv[2];
+
+  if (!fontPath) {
+    console.error('Error: No path specified.');
+    console.log('\nUsage:');
+    console.log('  node install-fonts.js <path>');
+    console.log('\nWhere <path> is a path to a font file or directory containing font files.');
+    process.exit(1);
+  }
+
+  installFonts(fontPath)
+    .then(result => {
+      if (!result.success) {
+        console.error(`Error: ${result.error}`);
+        process.exit(1);
+      }
+    })
+    .catch(error => {
+      console.error(`Error: ${error.message}`);
+      process.exit(1);
+    });
+}
+
+// Export functions
+export {
+  installFonts,
+  checkFontsInstalled,
+  isRunningAsAdmin,
+  getFontFiles
+};

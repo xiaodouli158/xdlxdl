@@ -1,161 +1,277 @@
 /**
  * OBS WebSocket - Profile and Scene Collection Manager
  *
- * This script checks if a profile and scene collection named "aaaa" exist in OBS.
- * If they exist, it switches to them. If they don't exist, it creates them.
+ * This module provides functions to manage OBS profiles and scene collections.
+ * It can check if a profile and scene collection exist, switch to them, or create them if they don't exist.
+ * It also configures video settings based on the provided resolution.
  */
 
 // Import the OBS WebSocket library
-import OBSWebSocket from 'obs-websocket-js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { getOBSWebSocketClient } from './obsWebSocketClient.js';
 
-// Create a new instance of the OBS WebSocket client
-const obs = new OBSWebSocket();
+/**
+ * Calculate dimensions based on the provided resolution and adjustment factor
+ * @param {number} width - The base width
+ * @param {number} height - The base height
+ * @returns {Object} The calculated dimensions
+ */
+function calculateDimensions(width, height) {
+  // If aspect ratio is less than 1 (portrait), set heightAdjustmentFactor to 0, otherwise use 52/1080
+  const heightAdjustmentFactor = (width / height < 1) ? 0 : 52/1080;
 
-// Connection parameters - adjust these as needed
-const connectionParams = {
-  address: 'ws://localhost:4455', // Default OBS WebSocket address and port
-  password: 'OwuWIvIyVGFwcL01', // OBS WebSocket password (change if needed)
-};
+  // Calculate actual dimensions
+  const actualBaseWidth = width;
+  const actualBaseHeight = Math.round(height * (1 + heightAdjustmentFactor));
+  const actualOutputWidth = width;
+  const actualOutputHeight = Math.round(height * (1 + heightAdjustmentFactor));
 
-// Flag to try connecting without password if initial connection fails
-let tryWithoutPassword = false;
+  // Format dimensions as strings for OBS API
+  const baseWidthStr = String(actualBaseWidth);
+  const baseHeightStr = String(actualBaseHeight);
+  const outputWidthStr = String(actualOutputWidth);
+  const outputHeightStr = String(actualOutputHeight);
+  const rescaleResStr = `${actualBaseWidth}x${actualBaseHeight}`;
 
-// Profile and scene collection name to check/create
-const targetName = 'aaaaa';
-const targetSceneCollection = 'aaaaa';
+  return {
+    actualBaseWidth,
+    actualBaseHeight,
+    actualOutputWidth,
+    actualOutputHeight,
+    baseWidthStr,
+    baseHeightStr,
+    outputWidthStr,
+    outputHeightStr,
+    rescaleResStr,
+    heightAdjustmentFactor
+  };
+}
 
-// Resolution variables - adjust these for different resolutions
-const baseWidth = 1920;
-const baseHeight = 1080;
-// If aspect ratio is less than 1 (portrait), set heightAdjustmentFactor to 0, otherwise use 52/1080
-const heightAdjustmentFactor = (baseWidth / baseHeight < 1) ? 0 : 52/1080;
+/**
+ * Manage OBS profile and scene collection
+ * @param {Object} options - Configuration options
+ * @param {string} options.profileName - Profile name to check/create
+ * @param {string} options.sceneCollectionName - Scene collection name to check/create
+ * @param {number} options.width - Base width for video settings
+ * @param {number} options.height - Base height for video settings
+ * @param {Object} options.obs - OBS WebSocket client (optional)
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function manageProfileAndSceneCollection(options) {
+  // Set default options
+  const {
+    profileName,
+    sceneCollectionName,
+    width = 1920,
+    height = 1080,
+    obs = getOBSWebSocketClient() // Use the shared client by default
+  } = options;
 
-// Calculate actual dimensions
-const actualBaseWidth = baseWidth;
-const actualBaseHeight = Math.round(baseHeight * (1 + heightAdjustmentFactor));
-const actualOutputWidth = baseWidth;
-const actualOutputHeight = Math.round(baseHeight * (1 + heightAdjustmentFactor));
+  // Calculate dimensions
+  const dimensions = calculateDimensions(width, height);
 
-// Format dimensions as strings for OBS API
-const baseWidthStr = String(actualBaseWidth);
-const baseHeightStr = String(actualBaseHeight);
-const outputWidthStr = String(actualOutputWidth);
-const outputHeightStr = String(actualOutputHeight);
-const rescaleResStr = `${actualBaseWidth}x${actualBaseHeight}`;
-
-// Register event handlers
-obs.on('ConnectionOpened', () => {
-  console.log('Event: Connection to OBS WebSocket server opened');
-});
-
-obs.on('ConnectionClosed', () => {
-  console.log('Event: Connection to OBS WebSocket server closed');
-});
-
-obs.on('ConnectionError', (error) => {
-  console.error('Event: Connection error:', error);
-});
-
-// Main function
-async function manageProfileAndSceneCollection() {
   try {
-    // Connect to OBS WebSocket with timeout
-    console.log('Connecting to OBS WebSocket...');
-
-    try {
-      // Create a promise that rejects after a timeout
-      const connectPromise = obs.connect(connectionParams.address, connectionParams.password);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000);
-      });
-
-      // Race the connection against the timeout
-      await Promise.race([connectPromise, timeoutPromise]);
-
-      console.log('Successfully connected to OBS WebSocket!');
-    } catch (connectionError) {
-      // If connection with password fails, try without password
-      if (connectionError.message.includes('Authentication') || tryWithoutPassword) {
-        console.log('Authentication failed. Trying to connect without password...');
-
-        // Create a new promise that rejects after a timeout
-        const connectPromiseNoPassword = obs.connect(connectionParams.address);
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000);
-        });
-
-        // Race the connection against the timeout
-        await Promise.race([connectPromiseNoPassword, timeoutPromise]);
-
-        console.log('Successfully connected to OBS WebSocket without password!');
-      } else {
-        // Re-throw the error if it's not an authentication error
-        throw connectionError;
-      }
+    // Check if the client is connected
+    if (!obs.identified) {
+      throw new Error('OBS WebSocket client is not connected');
     }
 
     // Get OBS version
     const { obsVersion } = await obs.call('GetVersion');
     console.log(`OBS Studio Version: ${obsVersion}`);
 
-    // Step 1: Handle profile
+    // Step 1: Handle profile with retry mechanism
     console.log('\n--- Profile Management ---');
-    const profileResponse = await obs.call('GetProfileList');
-    const profiles = profileResponse.profiles || [];
-    const currentProfile = profileResponse.currentProfileName;
 
-    console.log(`Current profile: ${currentProfile}`);
-    console.log(`Available profiles: ${profiles.join(', ')}`);
+    // 实现配置文件处理的重试机制
+    const maxProfileRetries = 3;
+    let profileRetryCount = 0;
+    let profileSuccess = false;
+    let profileCreated = false;
 
-    if (profiles.includes(targetName)) {
-      console.log(`Profile "${targetName}" exists.`);
+    while (!profileSuccess && profileRetryCount < maxProfileRetries) {
+      try {
+        // 获取当前配置文件列表
+        const profileResponse = await obs.call('GetProfileList');
+        const profiles = profileResponse.profiles || [];
+        const currentProfile = profileResponse.currentProfileName;
 
-      if (currentProfile !== targetName) {
-        console.log(`Switching to profile "${targetName}"...`);
-        await obs.call('SetCurrentProfile', { profileName: targetName });
-        console.log(`Successfully switched to profile "${targetName}"`);
-      } else {
-        console.log(`Already using profile "${targetName}"`);
+        console.log(`Current profile: ${currentProfile}`);
+        console.log(`Available profiles: ${profiles.join(', ')}`);
+
+        if (profiles.includes(profileName)) {
+          console.log(`Profile "${profileName}" exists.`);
+
+          if (currentProfile !== profileName) {
+            console.log(`Switching to profile "${profileName}"...`);
+            await obs.call('SetCurrentProfile', { profileName });
+            console.log(`Successfully switched to profile "${profileName}"`);
+
+            // 添加较长延迟，确保配置文件切换完成
+            console.log('Waiting for profile switch to complete...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            console.log(`Already using profile "${profileName}"`);
+          }
+        } else {
+          console.log(`Profile "${profileName}" does not exist. Creating...`);
+          await obs.call('CreateProfile', { profileName });
+          console.log(`Successfully created profile "${profileName}"`);
+          profileCreated = true;
+
+          // 添加较长延迟，确保配置文件创建完成
+          console.log('Waiting for profile creation to complete...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          // 切换到新创建的配置文件
+          console.log(`Switching to the newly created profile "${profileName}"...`);
+          await obs.call('SetCurrentProfile', { profileName });
+          console.log(`Switched to the newly created profile "${profileName}"`);
+
+          // 再次添加延迟，确保配置文件切换完成
+          console.log('Waiting for profile switch to complete...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        // 验证配置文件是否已成功应用
+        const verifyProfileResponse = await obs.call('GetProfileList');
+        const currentProfileAfterSwitch = verifyProfileResponse.currentProfileName;
+
+        if (currentProfileAfterSwitch !== profileName) {
+          throw new Error(`Profile switch verification failed. Expected "${profileName}", got "${currentProfileAfterSwitch}"`);
+        } else {
+          console.log(`Profile verification successful: Using "${profileName}"`);
+          profileSuccess = true;
+        }
+      } catch (error) {
+        profileRetryCount++;
+        console.log(`Profile attempt ${profileRetryCount}/${maxProfileRetries} failed: ${error.message}`);
+
+        if (profileRetryCount < maxProfileRetries) {
+          console.log(`Waiting before profile retry ${profileRetryCount + 1}...`);
+          await new Promise(resolve => setTimeout(resolve, 3000 * profileRetryCount));
+        } else {
+          console.error(`Failed to handle profile after ${maxProfileRetries} attempts`);
+          throw error;
+        }
       }
-    } else {
-      console.log(`Profile "${targetName}" does not exist. Creating...`);
-      await obs.call('CreateProfile', { profileName: targetName });
-      console.log(`Successfully created profile "${targetName}"`);
-
-      // Switch to the newly created profile
-      await obs.call('SetCurrentProfile', { profileName: targetName });
-      console.log(`Switched to the newly created profile "${targetName}"`);
     }
 
-    // Step 2: Handle scene collection
+    // 在配置文件处理完成后，添加额外的延迟
+    console.log('Profile setup complete. Adding extra delay before scene collection setup...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Step 2: Handle scene collection with improved retry mechanism
     console.log('\n--- Scene Collection Management ---');
-    const sceneCollectionResponse = await obs.call('GetSceneCollectionList');
-    const sceneCollections = sceneCollectionResponse.sceneCollections || [];
-    const currentSceneCollection = sceneCollectionResponse.currentSceneCollectionName;
 
-    console.log(`Current scene collection: ${currentSceneCollection}`);
-    console.log(`Available scene collections: ${sceneCollections.join(', ')}`);
+    // 实现更健壮的场景集合处理重试机制
+    const maxSceneRetries = 5; // 增加最大重试次数
+    let sceneRetryCount = 0;
+    let sceneCollectionSuccess = false;
 
-    if (sceneCollections.includes(targetSceneCollection)) {
-      console.log(`Scene collection "${targetSceneCollection}" exists.`);
+    // 在开始处理场景集合前，先刷新OBS WebSocket连接
+    try {
+      console.log('Refreshing OBS WebSocket connection before scene collection setup...');
+      // 获取OBS版本信息，确认连接正常
+      const { obsVersion, obsWebSocketVersion } = await obs.call('GetVersion');
+      console.log(`Confirmed connection to OBS version: ${obsVersion}, WebSocket version: ${obsWebSocketVersion}`);
+    } catch (error) {
+      console.log(`Connection check failed: ${error.message}. Continuing anyway...`);
+    }
 
-      if (currentSceneCollection !== targetSceneCollection) {
-        console.log(`Switching to scene collection "${targetSceneCollection}"...`);
-        await obs.call('SetCurrentSceneCollection', { sceneCollectionName: targetSceneCollection });
-        console.log(`Successfully switched to scene collection "${targetSceneCollection}"`);
-      } else {
-        console.log(`Already using scene collection "${targetSceneCollection}"`);
+    while (!sceneCollectionSuccess && sceneRetryCount < maxSceneRetries) {
+      try {
+        // 每次尝试前重新获取场景集合列表
+        const sceneCollectionResponse = await obs.call('GetSceneCollectionList');
+        const sceneCollections = sceneCollectionResponse.sceneCollections || [];
+        const currentSceneCollection = sceneCollectionResponse.currentSceneCollectionName;
+
+        console.log(`Current scene collection: ${currentSceneCollection}`);
+        console.log(`Available scene collections: ${sceneCollections.join(', ')}`);
+
+        if (sceneCollections.includes(sceneCollectionName)) {
+          console.log(`Scene collection "${sceneCollectionName}" exists.`);
+
+          if (currentSceneCollection !== sceneCollectionName) {
+            console.log(`Switching to scene collection "${sceneCollectionName}"...`);
+            await obs.call('SetCurrentSceneCollection', { sceneCollectionName });
+            console.log(`Successfully switched to scene collection "${sceneCollectionName}"`);
+
+            // 添加较长延迟，确保场景集合切换完成
+            console.log('Waiting for scene collection switch to complete...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          } else {
+            console.log(`Already using scene collection "${sceneCollectionName}"`);
+          }
+        } else {
+          console.log(`Scene collection "${sceneCollectionName}" does not exist. Creating...`);
+
+          // 添加较长延迟，确保OBS准备好创建新场景集合
+          console.log('Preparing to create new scene collection...');
+          await new Promise(resolve => setTimeout(resolve, 4000));
+
+          // 使用try-catch单独处理创建场景集合的操作
+          try {
+            await obs.call('CreateSceneCollection', { sceneCollectionName });
+            console.log(`Successfully created scene collection "${sceneCollectionName}"`);
+
+            // 添加较长延迟，确保场景集合创建完成
+            console.log('Waiting for scene collection creation to complete...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } catch (createError) {
+            console.error(`Error creating scene collection: ${createError.message}`);
+
+            if (createError.code === 600) {
+              console.log('Received error code 600. This usually means OBS is busy. Waiting longer...');
+              await new Promise(resolve => setTimeout(resolve, 6000));
+
+              // 尝试再次创建
+              console.log('Trying to create scene collection again...');
+              await obs.call('CreateSceneCollection', { sceneCollectionName });
+              console.log(`Successfully created scene collection "${sceneCollectionName}" on second attempt`);
+
+              // 添加更长延迟
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            } else {
+              throw createError; // 重新抛出其他错误
+            }
+          }
+
+          console.log(`Switched to the newly created scene collection "${sceneCollectionName}"`);
+        }
+
+        // 验证场景集合是否已成功应用
+        console.log('Verifying scene collection...');
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 验证前添加延迟
+
+        const verifySceneCollectionResponse = await obs.call('GetSceneCollectionList');
+        const currentSceneCollectionAfterSwitch = verifySceneCollectionResponse.currentSceneCollectionName;
+
+        if (currentSceneCollectionAfterSwitch === sceneCollectionName) {
+          console.log(`Scene collection verification successful: Using "${sceneCollectionName}"`);
+          sceneCollectionSuccess = true;
+
+          // 成功后添加额外延迟，确保OBS完全加载场景集合
+          console.log('Scene collection setup successful. Adding final delay...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        } else {
+          throw new Error(`Scene collection switch verification failed. Expected "${sceneCollectionName}", got "${currentSceneCollectionAfterSwitch}"`);
+        }
+      } catch (error) {
+        sceneRetryCount++;
+        console.log(`Scene collection attempt ${sceneRetryCount}/${maxSceneRetries} failed: ${error.message}`);
+
+        if (sceneRetryCount < maxSceneRetries) {
+          const waitTime = 3000 * sceneRetryCount;
+          console.log(`Waiting ${waitTime}ms before scene collection retry ${sceneRetryCount + 1}...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        } else {
+          console.error(`Failed to handle scene collection after ${maxSceneRetries} attempts`);
+          throw error;
+        }
       }
-    } else {
-      console.log(`Scene collection "${targetSceneCollection}" does not exist. Creating...`);
-      await obs.call('CreateSceneCollection', { sceneCollectionName: targetSceneCollection });
-      console.log(`Successfully created scene collection "${targetSceneCollection}"`);
-
-      // The OBS WebSocket API automatically switches to the newly created scene collection
-      console.log(`Switched to the newly created scene collection "${targetSceneCollection}"`);
     }
 
     console.log('\nProfile and scene collection management completed successfully!');
@@ -286,32 +402,32 @@ async function manageProfileAndSceneCollection() {
     await obs.call('SetProfileParameter', {
       parameterCategory: 'AdvOut',
       parameterName: 'RescaleRes',
-      parameterValue: rescaleResStr
+      parameterValue: dimensions.rescaleResStr
     });
 
     // Set video settings
     await obs.call('SetProfileParameter', {
       parameterCategory: 'Video',
       parameterName: 'BaseCX',
-      parameterValue: baseWidthStr
+      parameterValue: dimensions.baseWidthStr
     });
 
     await obs.call('SetProfileParameter', {
       parameterCategory: 'Video',
       parameterName: 'BaseCY',
-      parameterValue: baseHeightStr
+      parameterValue: dimensions.baseHeightStr
     });
 
     await obs.call('SetProfileParameter', {
       parameterCategory: 'Video',
       parameterName: 'OutputCX',
-      parameterValue: outputWidthStr
+      parameterValue: dimensions.outputWidthStr
     });
 
     await obs.call('SetProfileParameter', {
       parameterCategory: 'Video',
       parameterName: 'OutputCY',
-      parameterValue: outputHeightStr
+      parameterValue: dimensions.outputHeightStr
     });
 
     await obs.call('SetProfileParameter', {
@@ -356,49 +472,32 @@ async function manageProfileAndSceneCollection() {
     }
 
     if (configDir) {
-      // Get current profile
-      const globalIniPath = path.join(configDir, 'global.ini');
-      let currentProfile = targetName;
+      // We're using the profileName parameter directly for all operations
+      // No need to read the current profile from global.ini
 
-      if (fs.existsSync(globalIniPath)) {
-        try {
-          const globalIniContent = fs.readFileSync(globalIniPath, 'utf8');
-          const profileMatch = globalIniContent.match(/CurrentProfile=(.+)/);
-          if (profileMatch && profileMatch[1]) {
-            currentProfile = profileMatch[1].trim();
-          }
-        } catch (error) {
-          console.error('Error reading global.ini:', error);
-        }
-      }
-
-      console.log(`Current profile: ${currentProfile}`);
-      const streamEncoderPath = path.join(configDir, 'basic', 'profiles', currentProfile, 'streamEncoder.json');
-
-      // Define x264 encoder settings
-      const x264Settings = {
-        "streaming": {
-          "encoder": "obs_x264",
-          "rate_control": "CBR",
-          "bitrate": 6000,
-          "preset": "medium",
-          "profile": "high",
-          "tune": "film",
-          "x264opts": "merange=32:ref=16:bframes=16:b-adapt=2:direct=auto:me=tesa:subme=11:trellis=2:rc-lookahead=60"
-        }
-      };
-
-      // Write settings to file
-      fs.writeFileSync(streamEncoderPath, JSON.stringify(x264Settings, null, 2));
-      console.log(`✓ Encoder settings written to: ${streamEncoderPath}`);
+      // Optional: Configure x264 encoder settings via streamEncoder.json
+      // const streamEncoderPath = path.join(configDir, 'basic', 'profiles', profileName, 'streamEncoder.json');
+      // const x264Settings = {
+      //   "streaming": {
+      //     "encoder": "obs_x264",
+      //     "rate_control": "CBR",
+      //     "bitrate": 6000,
+      //     "preset": "medium",
+      //     "profile": "high",
+      //     "tune": "film",
+      //     "x264opts": "merange=32:ref=16:bframes=16:b-adapt=2:direct=auto:me=tesa:subme=11:trellis=2:rc-lookahead=60"
+      //   }
+      // };
+      // fs.writeFileSync(streamEncoderPath, JSON.stringify(x264Settings, null, 2));
+      // console.log(`✓ Encoder settings written to: ${streamEncoderPath}`);
 
       console.log('\nAll settings have been applied!');
       console.log('\nSummary of applied settings:');
       console.log(`- Output Mode: Advanced`);
       console.log(`- Encoder: obs_x264`);
-      console.log(`- Rescale: Enabled with Lanczos filter at ${rescaleResStr}`);
-      console.log(`- Base Resolution: ${actualBaseWidth}x${actualBaseHeight} (${baseWidth}x${baseHeight} with ${heightAdjustmentFactor.toFixed(5)} height adjustment)`);
-      console.log(`- Output Resolution: ${actualOutputWidth}x${actualOutputHeight} (${baseWidth}x${baseHeight} with ${heightAdjustmentFactor.toFixed(5)} height adjustment)`);
+      console.log(`- Rescale: Enabled with Lanczos filter at ${dimensions.rescaleResStr}`);
+      console.log(`- Base Resolution: ${dimensions.actualBaseWidth}x${dimensions.actualBaseHeight} (${width}x${height} with ${dimensions.heightAdjustmentFactor.toFixed(5)} height adjustment)`);
+      console.log(`- Output Resolution: ${dimensions.actualOutputWidth}x${dimensions.actualOutputHeight} (${width}x${height} with ${dimensions.heightAdjustmentFactor.toFixed(5)} height adjustment)`);
       console.log(`- Scale Type: bilinear`);
       console.log(`- FPS: 65`);
       console.log('- x264 Settings: CBR at 6000 kbps, medium preset, high profile, film tune');
@@ -407,6 +506,15 @@ async function manageProfileAndSceneCollection() {
     } else {
       console.error('Could not find OBS configuration directory');
     }
+
+    // Return success result
+    return {
+      success: true,
+      profileName,
+      sceneCollectionName,
+      dimensions,
+      message: 'OBS profile and scene collection configured successfully'
+    };
 
   } catch (error) {
     console.error('\n--- ERROR ---');
@@ -432,14 +540,49 @@ async function manageProfileAndSceneCollection() {
     console.log('4. Verify that the password is correct (or try with no password)');
     console.log('5. Check if there are any firewall issues blocking the connection');
     console.log('6. Try restarting OBS');
-  } finally {
-    // Disconnect from OBS WebSocket
-    if (obs.identified) {
-      await obs.disconnect();
-      console.log('\nDisconnected from OBS WebSocket.');
-    }
+
+    // Return error result
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to configure OBS profile and scene collection'
+    };
   }
+  // We don't disconnect here since we're using a shared client
 }
 
-// Run the main function
-manageProfileAndSceneCollection();
+/**
+ * Simple function to create or switch to a profile and scene collection with the same name
+ * @param {string} name - Name to use for both profile and scene collection
+ * @param {string} resolution - Resolution in format "widthxheight" (e.g., "1920x1080")
+ * @param {Object} obs - OBS WebSocket client (optional)
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function configureOBSWithName(name, resolution, obs = getOBSWebSocketClient()) {
+  // Parse resolution
+  let width = 1920;
+  let height = 1080;
+
+  if (resolution) {
+    const match = resolution.replace(/\s+/g, '').match(/(\d+)[xX×](\d+)/);
+    if (match) {
+      width = parseInt(match[1], 10);
+      height = parseInt(match[2], 10);
+    }
+  }
+
+  return manageProfileAndSceneCollection({
+    profileName: name,
+    sceneCollectionName: name,
+    width,
+    height,
+    obs
+  });
+}
+
+// Export functions
+export {
+  manageProfileAndSceneCollection,
+  configureOBSWithName,
+  calculateDimensions
+};

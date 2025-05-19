@@ -17,7 +17,7 @@
  */
 
 // Import the OBS WebSocket library
-const OBSWebSocket = require('obs-websocket-js').default;
+import OBSWebSocket from 'obs-websocket-js';
 
 // Create a new instance of the OBS WebSocket client
 const obs = new OBSWebSocket();

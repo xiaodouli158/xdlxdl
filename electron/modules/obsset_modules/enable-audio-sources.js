@@ -1,52 +1,54 @@
 /**
  * OBS WebSocket - Enable Default Audio Sources
  *
- * This script connects to OBS via WebSocket and enables default audio sources:
+ * This module provides functions to enable default audio sources in OBS:
  * 1. Desktop Audio (wasapi_output_capture)
  * 2. Microphone/AUX (wasapi_input_capture)
  *
  * It also adds a noise suppression filter to the desktop audio source.
  */
 
-// Import the OBS WebSocket library
-import OBSWebSocket from 'obs-websocket-js';
+// Import the shared OBS WebSocket client
+import { getOBSWebSocketClient } from './obsWebSocketClient.js';
 
-// Create a new instance of the OBS WebSocket client
-const obs = new OBSWebSocket();
-
-// Connection parameters - adjust these as needed
-const connectionParams = {
-  address: 'ws://localhost:4455', // Default OBS WebSocket address and port
-  password: 'OwuWIvIyVGFwcL01', // OBS WebSocket password (change if needed)
+/**
+ * Default audio source names
+ */
+const DEFAULT_AUDIO_SOURCES = {
+  desktopAudio: '桌面音频', // "Desktop Audio" in Chinese
+  micAudio: '麦克风/Aux', // "Microphone/Aux" in Chinese
+  noiseSuppressionFilter: '噪声抑制' // "Noise Suppression" in Chinese
 };
 
-// Register event handlers
-obs.on('ConnectionOpened', () => {
-  console.log('Event: Connection to OBS WebSocket server opened');
-});
+/**
+ * Enable default audio sources in OBS
+ * @param {Object} options - Configuration options
+ * @param {Object} options.audioSources - Audio source names (optional)
+ * @param {string} options.audioSources.desktopAudio - Desktop audio source name
+ * @param {string} options.audioSources.micAudio - Microphone audio source name
+ * @param {string} options.audioSources.noiseSuppressionFilter - Noise suppression filter name
+ * @param {Object} options.obs - OBS WebSocket client (optional)
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function enableAudioSources(options = {}) {
+  // Set default options
+  const {
+    audioSources = DEFAULT_AUDIO_SOURCES,
+    obs = getOBSWebSocketClient() // Use the shared client by default
+  } = options;
 
-obs.on('ConnectionClosed', () => {
-  console.log('Event: Connection to OBS WebSocket server closed');
-});
+  // Extract audio source names
+  const {
+    desktopAudio = DEFAULT_AUDIO_SOURCES.desktopAudio,
+    micAudio = DEFAULT_AUDIO_SOURCES.micAudio,
+    noiseSuppressionFilter = DEFAULT_AUDIO_SOURCES.noiseSuppressionFilter
+  } = audioSources;
 
-obs.on('ConnectionError', (error) => {
-  console.error('Event: Connection error:', error);
-});
-
-// Function to enable default audio sources
-async function enableAudioSources() {
   try {
-    console.log('Connecting to OBS WebSocket...');
-
-    // Create a promise that rejects after a timeout
-    const connectPromise = obs.connect(connectionParams.address, connectionParams.password);
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000);
-    });
-
-    // Race the connection against the timeout
-    await Promise.race([connectPromise, timeoutPromise]);
-    console.log('Connected to OBS WebSocket!');
+    // Check if the client is connected
+    if (!obs.identified) {
+      throw new Error('OBS WebSocket client is not connected');
+    }
 
     // Get OBS version
     const { obsVersion } = await obs.call('GetVersion');
@@ -60,55 +62,53 @@ async function enableAudioSources() {
     const { inputs } = await obs.call('GetInputList');
 
     // Check for desktop audio source
-    const desktopAudioName = '桌面音频'; // "Desktop Audio" in Chinese
     const desktopAudioExists = inputs.some(input =>
-      input.inputName === desktopAudioName && input.inputKind === 'wasapi_output_capture'
+      input.inputName === desktopAudio && input.inputKind === 'wasapi_output_capture'
     );
 
     // Check for microphone/AUX audio source
-    const micAudioName = '麦克风/Aux'; // "Microphone/Aux" in Chinese
     const micAudioExists = inputs.some(input =>
-      input.inputName === micAudioName && input.inputKind === 'wasapi_input_capture'
+      input.inputName === micAudio && input.inputKind === 'wasapi_input_capture'
     );
 
     // Create desktop audio source if it doesn't exist
     if (!desktopAudioExists) {
-      console.log(`Creating desktop audio source: ${desktopAudioName}`);
+      console.log(`Creating desktop audio source: ${desktopAudio}`);
       try {
         await obs.call('CreateInput', {
           sceneName: currentProgramSceneName,
-          inputName: desktopAudioName,
+          inputName: desktopAudio,
           inputKind: 'wasapi_output_capture',
           inputSettings: {
             'device_id': 'default'
           }
         });
-        console.log(`Successfully created desktop audio source: ${desktopAudioName}`);
+        console.log(`Successfully created desktop audio source: ${desktopAudio}`);
       } catch (error) {
         console.error(`Error creating desktop audio source: ${error.message}`);
       }
     } else {
-      console.log(`Desktop audio source already exists: ${desktopAudioName}`);
+      console.log(`Desktop audio source already exists: ${desktopAudio}`);
     }
 
     // Create microphone/AUX audio source if it doesn't exist
     if (!micAudioExists) {
-      console.log(`Creating microphone/AUX audio source: ${micAudioName}`);
+      console.log(`Creating microphone/AUX audio source: ${micAudio}`);
       try {
         await obs.call('CreateInput', {
           sceneName: currentProgramSceneName,
-          inputName: micAudioName,
+          inputName: micAudio,
           inputKind: 'wasapi_input_capture',
           inputSettings: {
             'device_id': 'default'
           }
         });
-        console.log(`Successfully created microphone/AUX audio source: ${micAudioName}`);
+        console.log(`Successfully created microphone/AUX audio source: ${micAudio}`);
       } catch (error) {
         console.error(`Error creating microphone/AUX audio source: ${error.message}`);
       }
     } else {
-      console.log(`Microphone/AUX audio source already exists: ${micAudioName}`);
+      console.log(`Microphone/AUX audio source already exists: ${micAudio}`);
     }
 
     // Apply noise suppression filter to desktop audio
@@ -116,24 +116,24 @@ async function enableAudioSources() {
       try {
         // Check if the filter already exists
         const { filters } = await obs.call('GetSourceFilterList', {
-          sourceName: desktopAudioName
+          sourceName: desktopAudio
         });
 
         const noiseSuppressFilterExists = filters.some(filter =>
-          filter.filterName === '噪声抑制' && filter.filterKind === 'noise_suppress_filter_v2'
+          filter.filterName === noiseSuppressionFilter && filter.filterKind === 'noise_suppress_filter_v2'
         );
 
         if (!noiseSuppressFilterExists) {
-          console.log(`Adding noise suppression filter to ${desktopAudioName}`);
+          console.log(`Adding noise suppression filter to ${desktopAudio}`);
           await obs.call('CreateSourceFilter', {
-            sourceName: desktopAudioName,
-            filterName: '噪声抑制',
+            sourceName: desktopAudio,
+            filterName: noiseSuppressionFilter,
             filterKind: 'noise_suppress_filter_v2',
             filterSettings: {}
           });
-          console.log(`Successfully added noise suppression filter to ${desktopAudioName}`);
+          console.log(`Successfully added noise suppression filter to ${desktopAudio}`);
         } else {
-          console.log(`Noise suppression filter already exists for ${desktopAudioName}`);
+          console.log(`Noise suppression filter already exists for ${desktopAudio}`);
         }
       } catch (error) {
         console.error(`Error configuring noise suppression filter: ${error.message}`);
@@ -141,6 +141,15 @@ async function enableAudioSources() {
     }
 
     console.log('\nAudio sources setup completed successfully!');
+
+    // Return success result
+    return {
+      success: true,
+      desktopAudio,
+      micAudio,
+      noiseSuppressionFilter,
+      message: 'Audio sources setup completed successfully'
+    };
   } catch (error) {
     console.error('Error:', error.message);
 
@@ -150,16 +159,29 @@ async function enableAudioSources() {
     console.log('2. Verify WebSocket server is enabled in OBS (Tools > WebSocket Server Settings)');
     console.log('3. Check that the port is correct (default is 4455)');
     console.log('4. Verify the password is correct');
-  } finally {
-    // Disconnect from OBS WebSocket
-    try {
-      await obs.disconnect();
-      console.log('Disconnected from OBS WebSocket');
-    } catch (disconnectError) {
-      // Ignore disconnect errors
-    }
+
+    // Return error result
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to setup audio sources'
+    };
   }
+  // We don't disconnect here since we're using a shared client
 }
 
-// Run the function to enable audio sources
-enableAudioSources();
+/**
+ * Simple function to enable default audio sources with default names
+ * @param {Object} obs - OBS WebSocket client (optional)
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function enableDefaultAudioSources(obs = getOBSWebSocketClient()) {
+  return enableAudioSources({ obs });
+}
+
+// Export functions
+export {
+  enableAudioSources,
+  enableDefaultAudioSources,
+  DEFAULT_AUDIO_SOURCES
+};
