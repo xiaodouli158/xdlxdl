@@ -490,35 +490,9 @@ async function manageProfileAndSceneCollection(options) {
               console.warn(`Warning: Failed to add video capture device: ${videoError.message}`);
             }
 
-            if (textInputKind) {
-              // 2. 添加文本源 "榜一"
-              console.log('\n2. Adding text source for "榜一"...');
-              try {
-                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一：XXXX');
-              } catch (textError) {
-                console.warn(`Warning: Failed to add text source "榜一": ${textError.message}`);
-              }
-
-              // 3. 添加文本源 "设备" 显示设备型号名称
-              console.log('\n3. Adding text source for "设备"...');
-              try {
-                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '设备', `设备：${deviceName || actualProfileName}`);
-              } catch (textError) {
-                console.warn(`Warning: Failed to add text source "设备": ${textError.message}`);
-              }
-
-              // 4. 添加文本源 "消费"
-              console.log('\n4. Adding text source for "消费"...');
-              try {
-                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '消费', '禁止未成年消费');
-              } catch (textError) {
-                console.warn(`Warning: Failed to add text source "消费": ${textError.message}`);
-              }
-            }
-
-            // 5. 添加图像源 "动图"
+            // 2. 添加图像源 "动图"
             if (imageInputKind) {
-              console.log('\n5. Adding image source for "动图"...');
+              console.log('\n2. Adding image source for "动图"...');
               try {
                 // 这里可以设置一个默认图片路径，或者从参数中获取
                 // 使用pathManager获取应用根目录，确保在开发和生产环境中都能正确找到图片
@@ -541,6 +515,32 @@ async function manageProfileAndSceneCollection(options) {
               }
             } else {
               console.warn('No image input kind found in OBS. Image source will not be created.');
+            }
+
+            if (textInputKind) {
+              // 3. 添加文本源 "榜一"
+              console.log('\n3. Adding text source for "榜一"...');
+              try {
+                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一：XXXX');
+              } catch (textError) {
+                console.warn(`Warning: Failed to add text source "榜一": ${textError.message}`);
+              }
+
+              // 4. 添加文本源 "设备" 显示设备型号名称
+              console.log('\n4. Adding text source for "设备"...');
+              try {
+                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '设备', `设备：${deviceName || actualProfileName}`);
+              } catch (textError) {
+                console.warn(`Warning: Failed to add text source "设备": ${textError.message}`);
+              }
+
+              // 5. 添加文本源 "消费"
+              console.log('\n5. Adding text source for "消费"...');
+              try {
+                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '消费', '禁止未成年消费');
+              } catch (textError) {
+                console.warn(`Warning: Failed to add text source "消费": ${textError.message}`);
+              }
             }
 
             console.log('All sources added successfully!');

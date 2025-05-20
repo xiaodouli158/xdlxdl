@@ -32,6 +32,11 @@ import {
   manageProfileAndSceneCollection
 } from './obsset_modules/manage-profile-scene.js';
 
+import {
+  configureSourceTransform
+} from './obsset_modules/set-source-position.js';
+
+
 // Get current file directory path (ES module __dirname alternative)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -285,11 +290,18 @@ async function oneClickConfigureOBS(options) {
 
     // Step 3: Configure OBS profile and scene collection
     console.log('Step 3: Configure OBS profile and scene collection');
-    const configResult = await configureOBSProfile(options);
+    const profileResult = await configureOBSProfile(options);
+    if (!profileResult.success) {
+      results.success = false;
+      results.message = 'One-click OBS configuration failed: Failed to configure OBS profile';
+      return results;
+    }
+    // Step 4: Configure source transform
+    const configResult = await configureSourceTransform();
 
     results.steps.push({
-      name: 'Configure OBS profile',
       success: configResult.success,
+      name: configResult.profileName,
       message: configResult.message
     });
 
