@@ -6,7 +6,7 @@ import os from 'os';
 import { exec } from 'child_process';
 import OBSWebSocket from 'obs-websocket-js';
 import { getSoftwarePath } from '../utils/Findsoftpaths.js';
-import { getOBSWebSocketClient } from './obsset_modules/obsWebSocketClient.js';
+import { closeProgram } from './Process_close_by_ahk.js';
 
 // 将回调函数转换为 Promise
 const fsReadFile = promisify(fs.readFile);
@@ -180,8 +180,8 @@ async function ensureAndConnectToOBS(address = '', password = '') {
       }
     }
 
-    // 使用共享的 OBS WebSocket 客户端
-    obsWebSocket = getOBSWebSocketClient();
+    // 创建新的 OBS WebSocket 客户端
+    obsWebSocket = new OBSWebSocket();
 
     try {
       // 简单直接的连接方式
@@ -241,18 +241,20 @@ async function checkIfOBSIsRunning() {
  */
 async function closeOBSProcess() {
   try {
-    // 在 Windows 上使用 taskkill 命令关闭 OBS
-    await execAsync('taskkill /F /IM obs64.exe');
+    // 使用通用程序关闭接口关闭OBS  
+    const result = await closeProgram({
+      exeName: 'obs64.exe',
+      confirmDialogTitles: ['Exit OBS', 'OBS Studio'],
+      updateScript: false
+    });
 
-    console.log('成功关闭 OBS 进程');
+    if (result.success) {
+      console.log('成功关闭 OBS 进程');
+    } else {
+      console.log('关闭 OBS 进程失败:', result.message);
+    }
 
-    // 等待进程完全关闭
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    return {
-      success: true,
-      message: '成功关闭 OBS 进程'
-    };
+    return result;
   } catch (error) {
     console.error('关闭 OBS 进程时出错:', error);
     return {
@@ -260,6 +262,7 @@ async function closeOBSProcess() {
       message: '关闭 OBS 进程时出错: ' + error.message
     };
   }
+
 }
 
 /**
@@ -281,8 +284,7 @@ async function startOBSProcess() {
 
     console.log('找到 OBS 安装路径:', obsPath);
 
-    // 检查路径是否为快捷方式(.lnk)或可执行文件(.exe)
-    const isLnk = obsPath.toLowerCase().endsWith('.lnk');
+    // 检查路径是否为可执行文件(.exe)
     const isExe = obsPath.toLowerCase().endsWith('.exe');
 
     // 根据文件类型选择不同的启动方式
@@ -607,6 +609,14 @@ function registerOBSWebSocketHandlers(ipcMain) {
 
 
 
+/**
+ * 获取当前的OBS WebSocket实例
+ * @returns {OBSWebSocket|null} OBS WebSocket实例
+ */
+function getOBSWebSocketInstance() {
+  return obsWebSocket;
+}
+
 // 导出核心功能函数
 export {
   ensureAndConnectToOBS,
@@ -616,7 +626,8 @@ export {
   disconnectFromOBS,
   checkIfOBSIsRunning,
   closeOBSProcess,
-  startOBSProcess
+  startOBSProcess,
+  getOBSWebSocketInstance
 };
 // 导出注册函数
 export { registerOBSWebSocketHandlers };

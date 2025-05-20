@@ -23,7 +23,7 @@ const connectionParams = {
 // Resolution variables - adjust these for different resolutions
 const baseWidth = 1920;
 const baseHeight = 1080;
-const heightAdjustmentFactor = 52/1080; // Additional height factor
+const heightAdjustmentFactor = 55/1080; // Additional height factor
 
 // Calculate actual dimensions
 const actualBaseWidth = baseWidth;

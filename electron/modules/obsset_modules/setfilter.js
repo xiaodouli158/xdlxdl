@@ -1,74 +1,60 @@
 /**
  * OBS WebSocket - Add Scale/Aspect Ratio and Crop Filters to Video Capture Device
  *
- * This script adds "Scale/Aspect Ratio" and "Crop/Pad" filters to a video capture device source in OBS:
- * 1. Connects to OBS WebSocket
- * 2. Gets the video capture device source
- * 3. Gets the current resolution of the device
- * 4. Calculates the aspect ratio
- * 5. Adds a "Scale/Aspect Ratio" filter with appropriate settings based on the aspect ratio:
- *    - If aspect ratio > 16/9, scale based on width
- *    - If aspect ratio <= 16/9, scale based on height
- * 6. Adds a "Crop/Pad" filter with appropriate settings based on the same calculation
+ * This module provides functions to add filters to a video capture device source in OBS:
+ * 1. Scale/Aspect Ratio filter - Adjusts the resolution based on aspect ratio
+ * 2. Crop/Pad filter - Crops the image to maintain 16:9 aspect ratio
+ * 3. Color Correction filter - Enhances image quality with brightness, contrast, etc.
+ * 4. LUT filter - Applies a color lookup table for consistent color grading
+ * 5. Sharpness filter - Improves image clarity
+ *
+ * The module requires an OBS WebSocket client to be provided by the caller.
  */
 
-// Import the OBS WebSocket library
-import OBSWebSocket from 'obs-websocket-js';
+// Import required modules
 import os from 'os';
+import OBSWebSocket from 'obs-websocket-js';
 
-// Create a new instance of the OBS WebSocket client
-const obs = new OBSWebSocket();
+/**
+ * Default filter names and settings
+ */
+const DEFAULT_FILTERS = {
+  // Source name for the video capture device
+  sourceName: '视频采集设备', // "Video Capture Device" in Chinese
 
-// Connection parameters - adjust these as needed
-const connectionParams = {
-  address: 'ws://localhost:4455', // Default OBS WebSocket address and port
-  password: 'OwuWIvIyVGFwcL01', // OBS WebSocket password (change if needed)
+  // Scale filter
+  scaleFilterName: '缩放/宽高比', // "Scale/Aspect Ratio" in Chinese
+  scaleFilterKind: 'scale_filter', // Filter kind for Scale/Aspect Ratio
+
+  // Crop filter
+  cropFilterName: '裁剪/填充', // "Crop/Pad" in Chinese
+  cropFilterKind: 'crop_filter', // Filter kind for Crop/Pad
+
+  // Color correction filter
+  colorFilterName: '色彩校正', // "Color Correction" in Chinese
+  colorFilterKind: 'color_filter_v2', // Filter kind for Color Correction
+  colorFilterSettings: {
+    brightness: 0.0000,
+    contrast: 0.20,
+    gamma: -0.13,
+    hue_shift: 0.00,
+    saturation: 0.30
+  },
+
+  // LUT filter
+  lutFilterName: '应用 LUT', // "Apply LUT" in Chinese
+  lutFilterKind: 'clut_filter', // Filter kind for Apply LUT
+  lutFilterSettings: {
+    image_path: 'C:/Program Files/obs-studio/data/obs-plugins/obs-filters/LUTs/original.cube'
+  },
+
+  // Sharpness filter
+  sharpnessFilterName: '锐化', // "Sharpness" in Chinese
+  sharpnessFilterKind: 'sharpness_filter_v2', // Filter kind for Sharpness
+  sharpnessFilterSettings: {
+    sharpness: 0.16
+  }
 };
-
-// Source name for the video capture device
-const sourceName = '视频采集设备'; // "Video Capture Device" in Chinese
-const scaleFilterName = '缩放/宽高比'; // "Scale/Aspect Ratio" in Chinese
-const scaleFilterKind = 'scale_filter'; // Filter kind for Scale/Aspect Ratio
-const cropFilterName = '裁剪/填充'; // "Crop/Pad" in Chinese
-const cropFilterKind = 'crop_filter'; // Filter kind for Crop/Pad
-const colorFilterName = '色彩校正'; // "Color Correction" in Chinese
-const colorFilterKind = 'color_filter_v2'; // Filter kind for Color Correction
-const lutFilterName = '应用 LUT'; // "Apply LUT" in Chinese
-const lutFilterKind = 'clut_filter'; // Filter kind for Apply LUT
-const sharpnessFilterName = '锐化'; // "Sharpness" in Chinese
-const sharpnessFilterKind = 'sharpness_filter_v2'; // Filter kind for Sharpness
-
-// Color correction filter settings
-const colorFilterSettings = {
-  brightness: 0.0000,
-  contrast: 0.20,
-  gamma: -0.13,
-  hue_shift: 0.00,
-  saturation: 0.30
-};
-
-// LUT filter settings
-const lutFilterSettings = {
-  image_path: 'C:/Program Files/obs-studio/data/obs-plugins/obs-filters/LUTs/original.cube'
-};
-
-// Sharpness filter settings
-const sharpnessFilterSettings = {
-  sharpness: 0.16
-};
-
-// Register event handlers
-obs.on('ConnectionOpened', () => {
-  console.log('Event: Connection to OBS WebSocket server opened');
-});
-
-obs.on('ConnectionClosed', () => {
-  console.log('Event: Connection to OBS WebSocket server closed');
-});
-
-obs.on('ConnectionError', (err) => {
-  console.error('Event: Connection to OBS WebSocket server failed:', err);
-});
 
 /**
  * Get the appropriate input kind for video capture devices based on OS
@@ -84,51 +70,6 @@ function getVideoCaptureInputKind() {
     return 'v4l2_input'; // Linux
   }
 }
-
-/**
- * Get the resolution of a video capture device
- * @param {string} inputName - The name of the input source
- * @returns {Promise<{width: number, height: number}>} The resolution of the device
- */
-async function getDeviceResolution(inputName) {
-  try {
-    // Get the current settings of the input
-    const { inputSettings } = await obs.call('GetInputSettings', {
-      inputName: inputName
-    });
-
-    // Check if resolution is directly available in settings
-    if (inputSettings.resolution && typeof inputSettings.resolution === 'string') {
-      const [width, height] = inputSettings.resolution.split('x').map(Number);
-      return { width, height };
-    }
-
-    // If resolution is not directly available, try to get it from available resolutions
-    const resolutionResponse = await obs.call('GetInputPropertiesListPropertyItems', {
-      inputName: inputName,
-      propertyName: 'resolution'
-    });
-
-    const resolutions = resolutionResponse.propertyItems || [];
-
-    // If there are available resolutions, use the active one
-    if (resolutions.length > 0) {
-      // Find the active resolution (the one that matches the current settings)
-      const activeResolution = resolutions.find(res => res.itemEnabled) || resolutions[0];
-      const [width, height] = activeResolution.itemValue.split('x').map(Number);
-      return { width, height };
-    }
-
-    // If we can't determine the resolution, use a default
-    console.log('Could not determine device resolution, using default 1280x720');
-    return { width: 1280, height: 720 };
-  } catch (error) {
-    console.error('Error getting device resolution:', error);
-    // Return a default resolution if there's an error
-    return { width: 1280, height: 720 };
-  }
-}
-
 
 /**
  * Calculate scaling and cropping values based on aspect ratio
@@ -193,9 +134,10 @@ function calculateScalingAndCropping(width, height) {
  * @param {string} filterName - The name of the filter
  * @param {number} width - The width of the source
  * @param {number} height - The height of the source
+ * @param {Object} obs - OBS WebSocket client
  * @returns {Promise<void>}
  */
-async function addScaleFilter(sourceName, filterName, width, height) {
+async function addScaleFilter(sourceName, filterName, width, height, obs) {
   try {
     // Calculate scaling values
     const { scaleWidth, scaleHeight } = calculateScalingAndCropping(width, height);
@@ -223,7 +165,7 @@ async function addScaleFilter(sourceName, filterName, width, height) {
       await obs.call('CreateSourceFilter', {
         sourceName: sourceName,
         filterName: filterName,
-        filterKind: scaleFilterKind,
+        filterKind: DEFAULT_FILTERS.scaleFilterKind,
         filterSettings: {
           resolution: `${scaleWidth}x${scaleHeight}`
         }
@@ -242,9 +184,10 @@ async function addScaleFilter(sourceName, filterName, width, height) {
  * @param {string} filterName - The name of the filter
  * @param {number} width - The width of the source
  * @param {number} height - The height of the source
+ * @param {Object} obs - OBS WebSocket client
  * @returns {Promise<void>}
  */
-async function addCropFilter(sourceName, filterName, width, height) {
+async function addCropFilter(sourceName, filterName, width, height, obs) {
   try {
     // Calculate crop values
     const { cropLeft, cropRight, cropTop, cropBottom } = calculateScalingAndCropping(width, height);
@@ -275,7 +218,7 @@ async function addCropFilter(sourceName, filterName, width, height) {
       await obs.call('CreateSourceFilter', {
         sourceName: sourceName,
         filterName: filterName,
-        filterKind: cropFilterKind,
+        filterKind: DEFAULT_FILTERS.cropFilterKind,
         filterSettings: {
           left: cropLeft,
           right: cropRight,
@@ -295,9 +238,11 @@ async function addCropFilter(sourceName, filterName, width, height) {
  * Add or update a Color Correction filter to a source
  * @param {string} sourceName - The name of the source
  * @param {string} filterName - The name of the filter
+ * @param {Object} filterSettings - Color correction filter settings
+ * @param {Object} obs - OBS WebSocket client
  * @returns {Promise<void>}
  */
-async function addColorCorrectionFilter(sourceName, filterName) {
+async function addColorCorrectionFilter(sourceName, filterName, filterSettings, obs) {
   try {
     // Check if the filter already exists
     const { filters } = await obs.call('GetSourceFilterList', {
@@ -312,7 +257,7 @@ async function addColorCorrectionFilter(sourceName, filterName) {
       await obs.call('SetSourceFilterSettings', {
         sourceName: sourceName,
         filterName: filterName,
-        filterSettings: colorFilterSettings
+        filterSettings: filterSettings
       });
     } else {
       // Create Color Correction filter
@@ -320,8 +265,8 @@ async function addColorCorrectionFilter(sourceName, filterName) {
       await obs.call('CreateSourceFilter', {
         sourceName: sourceName,
         filterName: filterName,
-        filterKind: colorFilterKind,
-        filterSettings: colorFilterSettings
+        filterKind: DEFAULT_FILTERS.colorFilterKind,
+        filterSettings: filterSettings
       });
     }
 
@@ -335,9 +280,11 @@ async function addColorCorrectionFilter(sourceName, filterName) {
  * Add or update a LUT filter to a source
  * @param {string} sourceName - The name of the source
  * @param {string} filterName - The name of the filter
+ * @param {Object} filterSettings - LUT filter settings
+ * @param {Object} obs - OBS WebSocket client
  * @returns {Promise<void>}
  */
-async function addLUTFilter(sourceName, filterName) {
+async function addLUTFilter(sourceName, filterName, filterSettings, obs) {
   try {
     // Check if the filter already exists
     const { filters } = await obs.call('GetSourceFilterList', {
@@ -352,7 +299,7 @@ async function addLUTFilter(sourceName, filterName) {
       await obs.call('SetSourceFilterSettings', {
         sourceName: sourceName,
         filterName: filterName,
-        filterSettings: lutFilterSettings
+        filterSettings: filterSettings
       });
     } else {
       // Create LUT filter
@@ -360,8 +307,8 @@ async function addLUTFilter(sourceName, filterName) {
       await obs.call('CreateSourceFilter', {
         sourceName: sourceName,
         filterName: filterName,
-        filterKind: lutFilterKind,
-        filterSettings: lutFilterSettings
+        filterKind: DEFAULT_FILTERS.lutFilterKind,
+        filterSettings: filterSettings
       });
     }
 
@@ -375,9 +322,11 @@ async function addLUTFilter(sourceName, filterName) {
  * Add or update a Sharpness filter to a source
  * @param {string} sourceName - The name of the source
  * @param {string} filterName - The name of the filter
+ * @param {Object} filterSettings - Sharpness filter settings
+ * @param {Object} obs - OBS WebSocket client
  * @returns {Promise<void>}
  */
-async function addSharpnessFilter(sourceName, filterName) {
+async function addSharpnessFilter(sourceName, filterName, filterSettings, obs) {
   try {
     // Check if the filter already exists
     const { filters } = await obs.call('GetSourceFilterList', {
@@ -392,7 +341,7 @@ async function addSharpnessFilter(sourceName, filterName) {
       await obs.call('SetSourceFilterSettings', {
         sourceName: sourceName,
         filterName: filterName,
-        filterSettings: sharpnessFilterSettings
+        filterSettings: filterSettings
       });
     } else {
       // Create Sharpness filter
@@ -400,8 +349,8 @@ async function addSharpnessFilter(sourceName, filterName) {
       await obs.call('CreateSourceFilter', {
         sourceName: sourceName,
         filterName: filterName,
-        filterKind: sharpnessFilterKind,
-        filterSettings: sharpnessFilterSettings
+        filterKind: DEFAULT_FILTERS.sharpnessFilterKind,
+        filterSettings: filterSettings
       });
     }
 
@@ -412,22 +361,63 @@ async function addSharpnessFilter(sourceName, filterName) {
 }
 
 /**
- * Main function to add all filters to video capture device
+ * Simple function to add all default filters to the default video capture device
+ * @param {number} width - Width of the device resolution
+ * @param {number} height - Height of the device resolution
+ * @param {Object} obs - OBS WebSocket client (required)
+ * @returns {Promise<Object>} Result of the operation
  */
-async function addFiltersToVideoCaptureDevice() {
+async function addDefaultFilters(width = 1920, height = 1080, obs) {
+  if (!obs) {
+    throw new Error('OBS WebSocket client is required. Please provide an OBS WebSocket client instance.');
+  }
+  return addFiltersToVideoCaptureDevice({ width, height, obs });
+}
+
+// Export functions and constants
+export {
+  DEFAULT_FILTERS,
+  getVideoCaptureInputKind,
+  calculateScalingAndCropping,
+  addScaleFilter,
+  addCropFilter,
+  addColorCorrectionFilter,
+  addLUTFilter,
+  addSharpnessFilter,
+  addFiltersToVideoCaptureDevice,
+  addDefaultFilters
+};
+
+/**
+ * Add all filters to video capture device
+ * @param {Object} options - Configuration options
+ * @param {string} options.source_name - Name of the video capture device source
+ * @param {number} options.width - Width of the device resolution
+ * @param {number} options.height - Height of the device resolution
+ * @param {Object} options.filters - Filter names and settings (optional)
+ * @param {Object} options.obs - OBS WebSocket client (optional)
+ * @returns {Promise<Object>} Result of the operation
+ */
+async function addFiltersToVideoCaptureDevice(options = {}) {
+  // Set default options
+  const {
+    source_name = DEFAULT_FILTERS.sourceName,
+    width = 1920, // Default width if not provided
+    height = 1080, // Default height if not provided
+    filters = DEFAULT_FILTERS,
+    obs // OBS WebSocket client must be provided
+  } = options;
+
+  // Check if OBS WebSocket client is provided
+  if (!obs) {
+    throw new Error('OBS WebSocket client is required. Please provide an OBS WebSocket client instance.');
+  }
+
   try {
-    // Connect to OBS WebSocket with timeout
-    console.log('Connecting to OBS WebSocket...');
-    console.log(`Address: ${connectionParams.address}`);
-    console.log(`Password: ${connectionParams.password ? '(set)' : '(not set)'}`);
-
-    const connectPromise = obs.connect(connectionParams.address, connectionParams.password);
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000);
-    });
-
-    await Promise.race([connectPromise, timeoutPromise]);
-    console.log('Successfully connected to OBS WebSocket!');
+    // Check if the client is connected
+    if (!obs.identified) {
+      throw new Error('OBS WebSocket client is not connected');
+    }
 
     // Get OBS version
     const { obsVersion } = await obs.call('GetVersion');
@@ -439,49 +429,82 @@ async function addFiltersToVideoCaptureDevice() {
 
     console.log(`Using input kind for video capture: ${videoCaptureInputKind}`);
 
-    // Find if our source already exists
+    // Find if our source exists
     const existingSource = inputs.find(input =>
-      input.inputName === sourceName && input.inputKind === videoCaptureInputKind
+      input.inputName === source_name && input.inputKind === videoCaptureInputKind
     );
 
     if (!existingSource) {
-      console.error(`Video capture device source "${sourceName}" not found`);
-      return;
+      console.error(`Video capture device source "${source_name}" not found`);
+      return {
+        success: false,
+        error: `Video capture device source "${source_name}" not found`,
+        message: 'Failed to apply filters'
+      };
     }
 
-    console.log(`Found video capture device source: ${sourceName}`);
-
-    // Get the resolution of the device
-    const { width, height } = await getDeviceResolution(sourceName);
+    console.log(`Found video capture device source: ${source_name}`);
+    console.log(`Using device resolution: ${width}x${height}`);
 
     // Add or update the scale filter
-    await addScaleFilter(sourceName, scaleFilterName, width, height);
+    await addScaleFilter(
+      source_name,
+      filters.scaleFilterName,
+      width,
+      height,
+      obs
+    );
 
     // Add or update the crop filter
-    await addCropFilter(sourceName, cropFilterName, width, height);
+    await addCropFilter(
+      source_name,
+      filters.cropFilterName,
+      width,
+      height,
+      obs
+    );
 
     // Add or update the color correction filter
-    await addColorCorrectionFilter(sourceName, colorFilterName);
+    await addColorCorrectionFilter(
+      source_name,
+      filters.colorFilterName,
+      filters.colorFilterSettings,
+      obs
+    );
 
     // Add or update the LUT filter
-    await addLUTFilter(sourceName, lutFilterName);
+    await addLUTFilter(
+      source_name,
+      filters.lutFilterName,
+      filters.lutFilterSettings,
+      obs
+    );
 
     // Add or update the sharpness filter
-    await addSharpnessFilter(sourceName, sharpnessFilterName);
+    await addSharpnessFilter(
+      source_name,
+      filters.sharpnessFilterName,
+      filters.sharpnessFilterSettings,
+      obs
+    );
 
     console.log('All filters applied successfully');
+
+    return {
+      success: true,
+      source_name,
+      width,
+      height,
+      message: 'All filters applied successfully'
+    };
   } catch (error) {
     console.error('Error:', error);
-  } finally {
-    // Disconnect when done
-    try {
-      obs.disconnect();
-      console.log('Disconnected from OBS WebSocket');
-    } catch (disconnectError) {
-      console.error('Error disconnecting:', disconnectError.message);
-    }
-  }
-}
 
-// Run the main function
-addFiltersToVideoCaptureDevice();
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to apply filters'
+    };
+  }
+  // We don't disconnect here since the client is managed by the caller
+}

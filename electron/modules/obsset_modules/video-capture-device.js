@@ -10,9 +10,10 @@
  * 6. Configures the device with selected parameters
  */
 
-// Import the shared OBS WebSocket client
+// Import required modules
 import os from 'os';
-import { getOBSWebSocketClient } from './obsWebSocketClient.js';
+import OBSWebSocket from 'obs-websocket-js';
+import { addFiltersToVideoCaptureDevice } from './setfilter.js';
 
 /**
  * Default source name for the video capture device
@@ -35,40 +36,6 @@ function getVideoCaptureInputKind() {
   } else {
     console.warn(`Unknown platform: ${platform}, defaulting to DirectShow`);
     return 'dshow_input';
-  }
-}
-
-/**
- * Get basic system hardware information
- * @returns {Object} Object containing hardware information
- */
-function getBasicSystemInfo() {
-  try {
-    // Get basic OS information
-    const systemInfo = {
-      os: {
-        platform: os.platform(),
-        type: os.type(),
-        release: os.release(),
-        arch: os.arch()
-      },
-      cpu: {
-        model: os.cpus()[0].model,
-        cores: os.cpus().length
-      },
-      memory: {
-        total: Math.round(os.totalmem() / (1024 * 1024 * 1024)) + ' GB',
-        free: Math.round(os.freemem() / (1024 * 1024 * 1024)) + ' GB'
-      }
-    };
-
-    return systemInfo;
-  } catch (error) {
-    console.error('Error getting system information:', error);
-    return {
-      error: 'Failed to retrieve system information',
-      message: error.message
-    };
   }
 }
 
@@ -248,6 +215,8 @@ async function getAvailableColorRanges(inputName) {
  * @param {Object} options - Configuration options
  * @param {string} options.sourceName - Source name for the video capture device (optional)
  * @param {Object} options.obs - OBS WebSocket client (optional)
+ * @param {number} options.width - Width of the device resolution (optional)
+ * @param {number} options.height - Height of the device resolution (optional)
  * @param {Object} options.deviceSettings - Device settings (optional)
  * @param {string} options.deviceSettings.resolution - Preferred resolution (optional)
  * @param {number} options.deviceSettings.fps - Preferred FPS (optional)
@@ -260,9 +229,16 @@ async function manageVideoCaptureDevice(options = {}) {
   // Set default options
   const {
     sourceName = DEFAULT_SOURCE_NAME,
-    obs = getOBSWebSocketClient(), // Use the shared client by default
+    obs, // OBS WebSocket client must be provided
+    width = 1920, // Default width if not provided
+    height = 1080, // Default height if not provided
     deviceSettings = {}
   } = options;
+
+  // Check if OBS WebSocket client is provided
+  if (!obs) {
+    throw new Error('OBS WebSocket client is required. Please provide an OBS WebSocket client instance.');
+  }
 
   try {
     // Check if the client is connected
@@ -329,13 +305,6 @@ async function manageVideoCaptureDevice(options = {}) {
         console.log(`${index + 1} | ${device.itemName} | ${device.itemValue}`);
       });
 
-      // Get system hardware information
-      console.log('\n--- System Hardware Information ---');
-      const systemInfo = getBasicSystemInfo();
-
-      console.log(`OS: ${systemInfo.os.type} ${systemInfo.os.release} (${systemInfo.os.platform})`);
-      console.log(`CPU: ${systemInfo.cpu.model} (${systemInfo.cpu.cores} cores/threads)`);
-      console.log(`Memory: ${systemInfo.memory.total} (${systemInfo.memory.free} free)`);
 
       // Select a device based on criteria similar to the Python implementation
       // Calculate the proportion of the current canvas
@@ -728,12 +697,46 @@ async function manageVideoCaptureDevice(options = {}) {
       }
     }
 
-    // Return success result with device information
-    return {
-      success: true,
-      sourceName,
-      message: 'Video capture device configured successfully'
-    };
+    // Step 10: Apply filters to the video capture device
+    console.log('\n--- Applying Filters to Video Capture Device ---');
+
+    // Use the width and height parameters that were passed in
+    // These dimensions are already known from the device model's resolution
+    console.log(`Using device model resolution: ${width}x${height}`);
+
+    // Apply filters
+    try {
+      const filtersResult = await addFiltersToVideoCaptureDevice({
+        source_name: sourceName,
+        width,
+        height,
+        obs
+      });
+
+      console.log(`Filters applied: ${filtersResult.success ? 'Successfully' : 'Failed'}`);
+
+      // Return success result with device information
+      return {
+        success: true,
+        sourceName,
+        width,
+        height,
+        filtersApplied: filtersResult.success,
+        message: 'Video capture device configured successfully with filters'
+      };
+    } catch (error) {
+      console.error(`Error applying filters: ${error.message}`);
+
+      // Return success for device setup but note filter failure
+      return {
+        success: true,
+        sourceName,
+        width,
+        height,
+        filtersApplied: false,
+        message: 'Video capture device configured successfully, but filters could not be applied'
+      };
+    }
   } catch (error) {
     console.error('\n--- ERROR ---');
     console.error(`Error message: ${error.message}`);
@@ -766,16 +769,21 @@ async function manageVideoCaptureDevice(options = {}) {
       message: 'Failed to configure video capture device'
     };
   }
-  // We don't disconnect here since we're using a shared client
+  // We don't disconnect here since the client is managed by the caller
 }
 
 /**
- * Simple function to add a video capture device with default settings
- * @param {Object} obs - OBS WebSocket client (optional)
- * @returns {Promise<Object>} Result of the operation
+ * Simple function to add a video capture device with default settings and apply filters
+ * @param {number} width - Width of the device resolution (optional)
+ * @param {number} height - Height of the device resolution (optional)
+ * @param {Object} obs - OBS WebSocket client (required)
+ * @returns {Promise<Object>} Result of the operation including filter application status
  */
-async function addDefaultVideoCaptureDevice(obs = getOBSWebSocketClient()) {
-  return manageVideoCaptureDevice({ obs });
+async function addDefaultVideoCaptureDevice(width = 1920, height = 1080, obs) {
+  if (!obs) {
+    throw new Error('OBS WebSocket client is required. Please provide an OBS WebSocket client instance.');
+  }
+  return manageVideoCaptureDevice({ width, height, obs });
 }
 
 // Export functions
@@ -783,7 +791,6 @@ export {
   manageVideoCaptureDevice,
   addDefaultVideoCaptureDevice,
   getVideoCaptureInputKind,
-  getBasicSystemInfo,
   identifyCaptureCard,
   DEFAULT_SOURCE_NAME
 };

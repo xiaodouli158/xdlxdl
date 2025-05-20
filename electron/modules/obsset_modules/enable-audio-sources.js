@@ -8,8 +8,8 @@
  * It also adds a noise suppression filter to the desktop audio source.
  */
 
-// Import the shared OBS WebSocket client
-import { getOBSWebSocketClient } from './obsWebSocketClient.js';
+// Import OBS WebSocket
+import OBSWebSocket from 'obs-websocket-js';
 
 /**
  * Default audio source names
@@ -34,8 +34,13 @@ async function enableAudioSources(options = {}) {
   // Set default options
   const {
     audioSources = DEFAULT_AUDIO_SOURCES,
-    obs = getOBSWebSocketClient() // Use the shared client by default
+    obs // OBS WebSocket client must be provided
   } = options;
+
+  // Check if OBS WebSocket client is provided
+  if (!obs) {
+    throw new Error('OBS WebSocket client is required. Please provide an OBS WebSocket client instance.');
+  }
 
   // Extract audio source names
   const {
@@ -167,15 +172,18 @@ async function enableAudioSources(options = {}) {
       message: 'Failed to setup audio sources'
     };
   }
-  // We don't disconnect here since we're using a shared client
+  // We don't disconnect here since the client is managed by the caller
 }
 
 /**
  * Simple function to enable default audio sources with default names
- * @param {Object} obs - OBS WebSocket client (optional)
+ * @param {Object} obs - OBS WebSocket client (required)
  * @returns {Promise<Object>} Result of the operation
  */
-async function enableDefaultAudioSources(obs = getOBSWebSocketClient()) {
+async function enableDefaultAudioSources(obs) {
+  if (!obs) {
+    throw new Error('OBS WebSocket client is required. Please provide an OBS WebSocket client instance.');
+  }
   return enableAudioSources({ obs });
 }
 

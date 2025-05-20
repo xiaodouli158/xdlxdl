@@ -78,7 +78,7 @@ async function executeCtrlShiftL() {
     const sendKeysFormat = acceleratorToSendKeys(hotkeyConfig.accelerator);
 
     // 获取应用程序名称
-    const appName = "My Electron App"; // 从package.json的productName获取
+    const appName = "小斗笠直播助手"; // 从package.json的productName获取
 
     // Create a PowerShell script with window focusing and keyboard shortcut execution
     const psScript = `

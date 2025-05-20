@@ -10,7 +10,12 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { getOBSWebSocketClient } from './obsWebSocketClient.js';
+import OBSWebSocket from 'obs-websocket-js';
+import { ensureAndConnectToOBS } from '../obsWebSocketHandlers.js';
+import { detectDedicatedGPU, getRecommendedEncoder } from '../../utils/hardware-info.js';
+import { addDefaultVideoCaptureDevice } from './video-capture-device.js';
+import { app } from 'electron';
+import pathManager, { PathType } from '../../utils/pathManager.js';
 
 /**
  * Calculate dimensions based on the provided resolution and adjustment factor
@@ -19,8 +24,8 @@ import { getOBSWebSocketClient } from './obsWebSocketClient.js';
  * @returns {Object} The calculated dimensions
  */
 function calculateDimensions(width, height) {
-  // If aspect ratio is less than 1 (portrait), set heightAdjustmentFactor to 0, otherwise use 52/1080
-  const heightAdjustmentFactor = (width / height < 1) ? 0 : 52/1080;
+  // If aspect ratio is less than 1 (portrait), set heightAdjustmentFactor to 0, otherwise use 55/1080
+  const heightAdjustmentFactor = (width / height < 1) ? 0 : 55 / 1080;
 
   // Calculate actual dimensions
   const actualBaseWidth = width;
@@ -33,7 +38,22 @@ function calculateDimensions(width, height) {
   const baseHeightStr = String(actualBaseHeight);
   const outputWidthStr = String(actualOutputWidth);
   const outputHeightStr = String(actualOutputHeight);
-  const rescaleResStr = `${actualBaseWidth}x${actualBaseHeight}`;
+
+  // 根据宽高比计算rescaleResStr
+  let rescaleWidth, rescaleHeight;
+
+  if (actualBaseWidth >= actualBaseHeight) {
+    // 横屏：固定高度为1080，按比例计算宽度
+    rescaleHeight = 1080;
+    rescaleWidth = Math.round(rescaleHeight * (actualBaseWidth / actualBaseHeight));
+
+  } else {
+    // 竖屏：固定宽度为1080，按比例计算高度
+    rescaleWidth = 1080;
+    rescaleHeight = Math.round(rescaleWidth * (actualBaseHeight / actualBaseWidth));
+  }
+
+  const rescaleResStr = `${rescaleWidth}x${rescaleHeight}`;
 
   return {
     actualBaseWidth,
@@ -45,6 +65,8 @@ function calculateDimensions(width, height) {
     outputWidthStr,
     outputHeightStr,
     rescaleResStr,
+    rescaleWidth,
+    rescaleHeight,
     heightAdjustmentFactor
   };
 }
@@ -56,7 +78,10 @@ function calculateDimensions(width, height) {
  * @param {string} options.sceneCollectionName - Scene collection name to check/create
  * @param {number} options.width - Base width for video settings
  * @param {number} options.height - Base height for video settings
- * @param {Object} options.obs - OBS WebSocket client (optional)
+ * @param {string} options.deviceName - Device model name (optional, defaults to profileName if not provided)
+ * @param {string} options.resolution - Resolution in format "widthxheight" (optional, derived from width and height if not provided)
+ * @param {string} options.address - OBS WebSocket address (optional)
+ * @param {string} options.password - OBS WebSocket password (optional)
  * @returns {Promise<Object>} Result of the operation
  */
 async function manageProfileAndSceneCollection(options) {
@@ -66,16 +91,53 @@ async function manageProfileAndSceneCollection(options) {
     sceneCollectionName,
     width = 1920,
     height = 1080,
-    obs = getOBSWebSocketClient() // Use the shared client by default
+    deviceName,
+    resolution,
+    address = 'localhost:4455',
+    password = ''
   } = options;
 
+  // Use deviceName as profileName and sceneCollectionName if provided
+  const actualProfileName = deviceName || profileName;
+  const actualSceneCollectionName = deviceName || sceneCollectionName;
+
+  // 创建一个新的OBS WebSocket连接，而不是使用共享实例
+  let obs = null;
+
+  // Parse resolution if provided, otherwise use width and height
+  let actualWidth = width;
+  let actualHeight = height;
+
+  if (resolution) {
+    const match = resolution.replace(/\s+/g, '').match(/(\d+)[xX×](\d+)/);
+    if (match) {
+      actualWidth = parseInt(match[1], 10);
+      actualHeight = parseInt(match[2], 10);
+    }
+  }
+
   // Calculate dimensions
-  const dimensions = calculateDimensions(width, height);
+  const dimensions = calculateDimensions(actualWidth, actualHeight);
 
   try {
-    // Check if the client is connected
-    if (!obs.identified) {
-      throw new Error('OBS WebSocket client is not connected');
+    // 使用obsWebSocketHandlers.js中的ensureAndConnectToOBS函数连接到OBS
+    console.log('正在连接到OBS WebSocket...');
+    const connectResult = await ensureAndConnectToOBS(address, password);
+
+    if (!connectResult.success) {
+      throw new Error(`无法连接到OBS WebSocket: ${connectResult.message}`);
+    }
+
+    // 获取OBS WebSocket客户端实例
+    // 注意：ensureAndConnectToOBS函数会返回一个连接结果，但不会返回OBS WebSocket客户端实例
+    // 我们需要从obsWebSocketHandlers.js模块中获取它
+
+    // 导入obsWebSocketHandlers.js中的getOBSWebSocketInstance函数
+    const { getOBSWebSocketInstance } = await import('../obsWebSocketHandlers.js');
+    obs = getOBSWebSocketInstance();
+
+    if (!obs || !obs.identified) {
+      throw new Error('OBS WebSocket客户端未连接');
     }
 
     // Get OBS version
@@ -89,7 +151,6 @@ async function manageProfileAndSceneCollection(options) {
     const maxProfileRetries = 3;
     let profileRetryCount = 0;
     let profileSuccess = false;
-    let profileCreated = false;
 
     while (!profileSuccess && profileRetryCount < maxProfileRetries) {
       try {
@@ -101,34 +162,33 @@ async function manageProfileAndSceneCollection(options) {
         console.log(`Current profile: ${currentProfile}`);
         console.log(`Available profiles: ${profiles.join(', ')}`);
 
-        if (profiles.includes(profileName)) {
-          console.log(`Profile "${profileName}" exists.`);
+        if (profiles.includes(actualProfileName)) {
+          console.log(`Profile "${actualProfileName}" exists.`);
 
-          if (currentProfile !== profileName) {
-            console.log(`Switching to profile "${profileName}"...`);
-            await obs.call('SetCurrentProfile', { profileName });
-            console.log(`Successfully switched to profile "${profileName}"`);
+          if (currentProfile !== actualProfileName) {
+            console.log(`Switching to profile "${actualProfileName}"...`);
+            await obs.call('SetCurrentProfile', { profileName: actualProfileName });
+            console.log(`Successfully switched to profile "${actualProfileName}"`);
 
             // 添加较长延迟，确保配置文件切换完成
             console.log('Waiting for profile switch to complete...');
             await new Promise(resolve => setTimeout(resolve, 2000));
           } else {
-            console.log(`Already using profile "${profileName}"`);
+            console.log(`Already using profile "${actualProfileName}"`);
           }
         } else {
-          console.log(`Profile "${profileName}" does not exist. Creating...`);
-          await obs.call('CreateProfile', { profileName });
-          console.log(`Successfully created profile "${profileName}"`);
-          profileCreated = true;
+          console.log(`Profile "${actualProfileName}" does not exist. Creating...`);
+          await obs.call('CreateProfile', { profileName: actualProfileName });
+          console.log(`Successfully created profile "${actualProfileName}"`);
 
           // 添加较长延迟，确保配置文件创建完成
           console.log('Waiting for profile creation to complete...');
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise(resolve => setTimeout(resolve, 2000));
 
           // 切换到新创建的配置文件
-          console.log(`Switching to the newly created profile "${profileName}"...`);
-          await obs.call('SetCurrentProfile', { profileName });
-          console.log(`Switched to the newly created profile "${profileName}"`);
+          console.log(`Switching to the newly created profile "${actualProfileName}"...`);
+          await obs.call('SetCurrentProfile', { profileName: actualProfileName });
+          console.log(`Switched to the newly created profile "${actualProfileName}"`);
 
           // 再次添加延迟，确保配置文件切换完成
           console.log('Waiting for profile switch to complete...');
@@ -139,10 +199,10 @@ async function manageProfileAndSceneCollection(options) {
         const verifyProfileResponse = await obs.call('GetProfileList');
         const currentProfileAfterSwitch = verifyProfileResponse.currentProfileName;
 
-        if (currentProfileAfterSwitch !== profileName) {
-          throw new Error(`Profile switch verification failed. Expected "${profileName}", got "${currentProfileAfterSwitch}"`);
+        if (currentProfileAfterSwitch !== actualProfileName) {
+          throw new Error(`Profile switch verification failed. Expected "${actualProfileName}", got "${currentProfileAfterSwitch}"`);
         } else {
-          console.log(`Profile verification successful: Using "${profileName}"`);
+          console.log(`Profile verification successful: Using "${actualProfileName}"`);
           profileSuccess = true;
         }
       } catch (error) {
@@ -151,7 +211,7 @@ async function manageProfileAndSceneCollection(options) {
 
         if (profileRetryCount < maxProfileRetries) {
           console.log(`Waiting before profile retry ${profileRetryCount + 1}...`);
-          await new Promise(resolve => setTimeout(resolve, 3000 * profileRetryCount));
+          await new Promise(resolve => setTimeout(resolve, 2000 * profileRetryCount));
         } else {
           console.error(`Failed to handle profile after ${maxProfileRetries} attempts`);
           throw error;
@@ -159,9 +219,155 @@ async function manageProfileAndSceneCollection(options) {
       }
     }
 
-    // 在配置文件处理完成后，添加额外的延迟
+    // 在配置文件处理完成后，先配置视频设置，然后再创建场景集合
+    // Configure video settings immediately after profile creation/switching, before scene collection management
+    console.log('\n--- Video Settings Configuration ---');
+    console.log('Configuring video settings for the profile...');
+
+    // Set video settings
+    await obs.call('SetVideoSettings', {
+      baseWidth: dimensions.actualBaseWidth,
+      baseHeight: dimensions.actualBaseHeight,
+      outputWidth: dimensions.actualOutputWidth,
+      outputHeight: dimensions.actualOutputHeight,
+      fpsNumerator: 65,
+      fpsDenominator: 1
+    });
+
+    // 辅助函数：批量设置配置参数
+    async function setProfileParameters(obs, parameters) {
+      for (const param of parameters) {
+        await obs.call('SetProfileParameter', param);
+      }
+    }
+
+    // 设置输出模式为高级模式
+    await setProfileParameters(obs, [
+      {
+        parameterCategory: 'Output',
+        parameterName: 'Mode',
+        parameterValue: 'Advanced'
+      }
+    ]);
+
+    // 获取推荐的编码器
+    console.log('Detecting available hardware encoders...');
+    const recommendedEncoder = await getRecommendedEncoder();
+    // console.log('Recommended encoder:', recommendedEncoder.name);
+
+    // // 根据硬件配置编码器设置
+    // if (recommendedEncoder.type === 'hardware') {
+    //   console.log(`Using hardware encoder: ${recommendedEncoder.name}`);
+
+    //   // 配置硬件编码器参数
+    //   const encoderParams = [
+    //     {
+    //       parameterCategory: 'AdvOut',
+    //       parameterName: 'Encoder',
+    //       parameterValue: recommendedEncoder.name
+    //     }
+    //   ];
+
+    //   // 配置NVIDIA NVENC特定设置
+    //   if (recommendedEncoder.name === 'jim_nvenc') {
+    //     console.log('Configuring NVIDIA NVENC settings');
+
+    //     encoderParams.push(
+    //       {
+    //         parameterCategory: 'AdvOut',
+    //         parameterName: 'NVENCPreset',
+    //         parameterValue: recommendedEncoder.preset
+    //       },
+    //       {
+    //         parameterCategory: 'AdvOut',
+    //         parameterName: 'NVENCProfile',
+    //         parameterValue: 'high'
+    //       },
+    //       {
+    //         parameterCategory: 'AdvOut',
+    //         parameterName: 'NVENCPsychoVisualTuning',
+    //         parameterValue: 'true'
+    //       },
+    //       {
+    //         parameterCategory: 'AdvOut',
+    //         parameterName: 'NVENCLookAhead',
+    //         parameterValue: 'true'
+    //       }
+    //     );
+    //   }
+    //   // 配置AMD AMF特定设置
+    //   else if (recommendedEncoder.name === 'amd_amf_h264') {
+    //     console.log('Configuring AMD AMF settings');
+
+    //     encoderParams.push(
+    //       {
+    //         parameterCategory: 'AdvOut',
+    //         parameterName: 'AMFPreset',
+    //         parameterValue: recommendedEncoder.preset
+    //       },
+    //       {
+    //         parameterCategory: 'AdvOut',
+    //         parameterName: 'AMFProfile',
+    //         parameterValue: 'high'
+    //       }
+    //     );
+    //   }
+
+    //   // 应用编码器设置
+    //   await setProfileParameters(obs, encoderParams);
+    // } else {
+    //   console.log('Using software encoder: x264');
+
+    //   // 配置软件编码器(x264)参数
+    //   await setProfileParameters(obs, [
+    //     {
+    //       parameterCategory: 'AdvOut',
+    //       parameterName: 'Encoder',
+    //       parameterValue: 'obs_x264'
+    //     },
+    //     {
+    //       parameterCategory: 'AdvOut',
+    //       parameterName: 'Preset',
+    //       parameterValue: 'veryfast'
+    //     },
+    //     {
+    //       parameterCategory: 'AdvOut',
+    //       parameterName: 'Profile',
+    //       parameterValue: 'high'
+    //     }
+    //   ]);
+    // }
+
+    // 设置重新缩放和比特率设置
+    await setProfileParameters(obs, [
+      {
+        parameterCategory: 'AdvOut',
+        parameterName: 'Encoder',
+        parameterValue: recommendedEncoder.name
+      },
+      // 重新缩放设置
+      {
+        parameterCategory: 'AdvOut',
+        parameterName: 'Rescale',
+        parameterValue: 'true'
+      },
+      {
+        parameterCategory: 'AdvOut',
+        parameterName: 'RescaleFilter',
+        parameterValue: '4' // Lanczos
+      },
+      {
+        parameterCategory: 'AdvOut',
+        parameterName: 'RescaleRes',
+        parameterValue: dimensions.rescaleResStr
+      }
+    ]);
+
+    console.log('Video settings configured successfully!');
+
+    // 添加额外的延迟
     console.log('Profile setup complete. Adding extra delay before scene collection setup...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Step 2: Handle scene collection with improved retry mechanism
     console.log('\n--- Scene Collection Management ---');
@@ -191,55 +397,55 @@ async function manageProfileAndSceneCollection(options) {
         console.log(`Current scene collection: ${currentSceneCollection}`);
         console.log(`Available scene collections: ${sceneCollections.join(', ')}`);
 
-        if (sceneCollections.includes(sceneCollectionName)) {
-          console.log(`Scene collection "${sceneCollectionName}" exists.`);
+        if (sceneCollections.includes(actualSceneCollectionName)) {
+          console.log(`Scene collection "${actualSceneCollectionName}" exists.`);
 
-          if (currentSceneCollection !== sceneCollectionName) {
-            console.log(`Switching to scene collection "${sceneCollectionName}"...`);
-            await obs.call('SetCurrentSceneCollection', { sceneCollectionName });
-            console.log(`Successfully switched to scene collection "${sceneCollectionName}"`);
+          if (currentSceneCollection !== actualSceneCollectionName) {
+            console.log(`Switching to scene collection "${actualSceneCollectionName}"...`);
+            await obs.call('SetCurrentSceneCollection', { sceneCollectionName: actualSceneCollectionName });
+            console.log(`Successfully switched to scene collection "${actualSceneCollectionName}"`);
 
             // 添加较长延迟，确保场景集合切换完成
             console.log('Waiting for scene collection switch to complete...');
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
           } else {
-            console.log(`Already using scene collection "${sceneCollectionName}"`);
+            console.log(`Already using scene collection "${actualSceneCollectionName}"`);
           }
         } else {
-          console.log(`Scene collection "${sceneCollectionName}" does not exist. Creating...`);
+          console.log(`Scene collection "${actualSceneCollectionName}" does not exist. Creating...`);
 
           // 添加较长延迟，确保OBS准备好创建新场景集合
           console.log('Preparing to create new scene collection...');
-          await new Promise(resolve => setTimeout(resolve, 4000));
+          await new Promise(resolve => setTimeout(resolve, 2000));
 
           // 使用try-catch单独处理创建场景集合的操作
           try {
-            await obs.call('CreateSceneCollection', { sceneCollectionName });
-            console.log(`Successfully created scene collection "${sceneCollectionName}"`);
+            await obs.call('CreateSceneCollection', { sceneCollectionName: actualSceneCollectionName });
+            console.log(`Successfully created scene collection "${actualSceneCollectionName}"`);
 
             // 添加较长延迟，确保场景集合创建完成
             console.log('Waiting for scene collection creation to complete...');
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(resolve => setTimeout(resolve, 3000));
           } catch (createError) {
             console.error(`Error creating scene collection: ${createError.message}`);
 
             if (createError.code === 600) {
               console.log('Received error code 600. This usually means OBS is busy. Waiting longer...');
-              await new Promise(resolve => setTimeout(resolve, 6000));
+              await new Promise(resolve => setTimeout(resolve, 3000));
 
               // 尝试再次创建
               console.log('Trying to create scene collection again...');
-              await obs.call('CreateSceneCollection', { sceneCollectionName });
-              console.log(`Successfully created scene collection "${sceneCollectionName}" on second attempt`);
+              await obs.call('CreateSceneCollection', { sceneCollectionName: actualSceneCollectionName });
+              console.log(`Successfully created scene collection "${actualSceneCollectionName}" on second attempt`);
 
               // 添加更长延迟
-              await new Promise(resolve => setTimeout(resolve, 5000));
+              await new Promise(resolve => setTimeout(resolve, 3000));
             } else {
               throw createError; // 重新抛出其他错误
             }
           }
 
-          console.log(`Switched to the newly created scene collection "${sceneCollectionName}"`);
+          console.log(`Switched to the newly created scene collection "${actualSceneCollectionName}"`);
         }
 
         // 验证场景集合是否已成功应用
@@ -249,15 +455,101 @@ async function manageProfileAndSceneCollection(options) {
         const verifySceneCollectionResponse = await obs.call('GetSceneCollectionList');
         const currentSceneCollectionAfterSwitch = verifySceneCollectionResponse.currentSceneCollectionName;
 
-        if (currentSceneCollectionAfterSwitch === sceneCollectionName) {
-          console.log(`Scene collection verification successful: Using "${sceneCollectionName}"`);
+        if (currentSceneCollectionAfterSwitch === actualSceneCollectionName) {
+          console.log(`Scene collection verification successful: Using "${actualSceneCollectionName}"`);
           sceneCollectionSuccess = true;
 
           // 成功后添加额外延迟，确保OBS完全加载场景集合
           console.log('Scene collection setup successful. Adding final delay...');
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // 添加场景源
+          console.log('\n--- Adding Scene Sources ---');
+
+          try {
+            // 获取当前场景
+            const { currentProgramSceneName } = await obs.call('GetCurrentProgramScene');
+            console.log(`Current Scene: ${currentProgramSceneName}`);
+
+            // 获取可用的输入类型
+            const { inputKinds } = await obs.call('GetInputKindList');
+            const textInputKind = inputKinds.find(kind => kind === 'text_gdiplus_v3') ||
+              inputKinds.find(kind => kind.includes('text_gdiplus'));
+            const imageInputKind = inputKinds.find(kind => kind === 'image_source');
+
+            if (!textInputKind) {
+              console.warn('No text input kind found in OBS. Text sources will not be created.');
+            }
+
+            // 1. 添加视频采集设备
+            console.log('\n1. Adding video capture device...');
+            try {
+              const videoResult = await addDefaultVideoCaptureDevice(actualWidth, actualHeight, obs);
+              console.log(`Video capture device result: ${videoResult.success ? 'Success' : 'Failed'}`);
+            } catch (videoError) {
+              console.warn(`Warning: Failed to add video capture device: ${videoError.message}`);
+            }
+
+            if (textInputKind) {
+              // 2. 添加文本源 "榜一"
+              console.log('\n2. Adding text source for "榜一"...');
+              try {
+                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一：XXXX');
+              } catch (textError) {
+                console.warn(`Warning: Failed to add text source "榜一": ${textError.message}`);
+              }
+
+              // 3. 添加文本源 "设备" 显示设备型号名称
+              console.log('\n3. Adding text source for "设备"...');
+              try {
+                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '设备', `设备：${deviceName || actualProfileName}`);
+              } catch (textError) {
+                console.warn(`Warning: Failed to add text source "设备": ${textError.message}`);
+              }
+
+              // 4. 添加文本源 "消费"
+              console.log('\n4. Adding text source for "消费"...');
+              try {
+                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '消费', '禁止未成年消费');
+              } catch (textError) {
+                console.warn(`Warning: Failed to add text source "消费": ${textError.message}`);
+              }
+            }
+
+            // 5. 添加图像源 "动图"
+            if (imageInputKind) {
+              console.log('\n5. Adding image source for "动图"...');
+              try {
+                // 这里可以设置一个默认图片路径，或者从参数中获取
+                // 使用pathManager获取应用根目录，确保在开发和生产环境中都能正确找到图片
+                let imagePath;
+                if (app.isPackaged) {
+                  // 生产环境路径
+                  imagePath = path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'public', 'images', 'winer.gif');
+                } else {
+                  // 开发环境路径
+                  imagePath = path.join(app.getAppPath(), 'public', 'images', 'winer.gif');
+                }
+                console.log(`动图GIF路径: ${imagePath}`);
+                if (imagePath) {
+                  await addOrUpdateImageSource(obs, currentProgramSceneName, imageInputKind, '动图', imagePath);
+                } else {
+                  console.log('No image path provided for "动图". Skipping image source creation.');
+                }
+              } catch (imageError) {
+                console.warn(`Warning: Failed to add image source "动图": ${imageError.message}`);
+              }
+            } else {
+              console.warn('No image input kind found in OBS. Image source will not be created.');
+            }
+
+            console.log('All sources added successfully!');
+          } catch (sourcesError) {
+            console.warn(`Warning: Error adding sources: ${sourcesError.message}`);
+            // 继续执行，不要因为添加源失败而中断整个流程
+          }
         } else {
-          throw new Error(`Scene collection switch verification failed. Expected "${sceneCollectionName}", got "${currentSceneCollectionAfterSwitch}"`);
+          throw new Error(`Scene collection switch verification failed. Expected "${actualSceneCollectionName}", got "${currentSceneCollectionAfterSwitch}"`);
         }
       } catch (error) {
         sceneRetryCount++;
@@ -274,246 +566,16 @@ async function manageProfileAndSceneCollection(options) {
       }
     }
 
-    console.log('\nProfile and scene collection management completed successfully!');
 
-    // Step 3: Enable default audio sources
-    console.log('\n--- Audio Sources Management ---');
-
-    // Get current inputs to check if audio sources already exist
-    const { inputs } = await obs.call('GetInputList');
-
-    // Check for desktop audio source
-    const desktopAudioName = '桌面音频'; // "Desktop Audio" in Chinese
-    const desktopAudioExists = inputs.some(input =>
-      input.inputName === desktopAudioName && input.inputKind === 'wasapi_output_capture'
-    );
-
-    // Check for microphone/AUX audio source
-    const micAudioName = '麦克风/Aux'; // "Microphone/Aux" in Chinese
-    const micAudioExists = inputs.some(input =>
-      input.inputName === micAudioName && input.inputKind === 'wasapi_input_capture'
-    );
-
-    // Get current scene
-    const { currentProgramSceneName } = await obs.call('GetCurrentProgramScene');
-
-    // Create desktop audio source if it doesn't exist
-    if (!desktopAudioExists) {
-      console.log(`Creating desktop audio source: ${desktopAudioName}`);
-      try {
-        await obs.call('CreateInput', {
-          sceneName: currentProgramSceneName,
-          inputName: desktopAudioName,
-          inputKind: 'wasapi_output_capture',
-          inputSettings: {
-            'device_id': 'default'
-          }
-        });
-        console.log(`Successfully created desktop audio source: ${desktopAudioName}`);
-      } catch (error) {
-        console.error(`Error creating desktop audio source: ${error.message}`);
-      }
-    } else {
-      console.log(`Desktop audio source already exists: ${desktopAudioName}`);
-    }
-
-    // Create microphone/AUX audio source if it doesn't exist
-    if (!micAudioExists) {
-      console.log(`Creating microphone/AUX audio source: ${micAudioName}`);
-      try {
-        await obs.call('CreateInput', {
-          sceneName: currentProgramSceneName,
-          inputName: micAudioName,
-          inputKind: 'wasapi_input_capture',
-          inputSettings: {
-            'device_id': 'default'
-          }
-        });
-        console.log(`Successfully created microphone/AUX audio source: ${micAudioName}`);
-      } catch (error) {
-        console.error(`Error creating microphone/AUX audio source: ${error.message}`);
-      }
-    } else {
-      console.log(`Microphone/AUX audio source already exists: ${micAudioName}`);
-    }
-
-    // Apply noise suppression filter to desktop audio (optional)
-    if (desktopAudioExists || !desktopAudioExists) {
-      try {
-        // Check if the filter already exists
-        const { filters } = await obs.call('GetSourceFilterList', {
-          sourceName: desktopAudioName
-        });
-
-        const noiseSuppressFilterExists = filters.some(filter =>
-          filter.filterName === '噪声抑制' && filter.filterKind === 'noise_suppress_filter_v2'
-        );
-
-        if (!noiseSuppressFilterExists) {
-          console.log(`Adding noise suppression filter to ${desktopAudioName}`);
-          await obs.call('CreateSourceFilter', {
-            sourceName: desktopAudioName,
-            filterName: '噪声抑制',
-            filterKind: 'noise_suppress_filter_v2',
-            filterSettings: {}
-          });
-          console.log(`Successfully added noise suppression filter to ${desktopAudioName}`);
-        } else {
-          console.log(`Noise suppression filter already exists for ${desktopAudioName}`);
-        }
-      } catch (error) {
-        console.error(`Error configuring noise suppression filter: ${error.message}`);
-      }
-    }
-
-    console.log('Audio sources setup completed successfully!');
-
-    // Step 4: Configure x264 settings for the profile
-    console.log('\n--- x264 Configuration ---');
-    console.log('Configuring x264 encoder settings for the profile...');
-
-    // Set output mode to Advanced
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Output',
-      parameterName: 'Mode',
-      parameterValue: 'Advanced'
-    });
-
-    // Set encoder to x264
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'AdvOut',
-      parameterName: 'Encoder',
-      parameterValue: 'obs_x264'
-    });
-
-    // Set rescale settings
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'AdvOut',
-      parameterName: 'Rescale',
-      parameterValue: 'true'
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'AdvOut',
-      parameterName: 'RescaleFilter',
-      parameterValue: '4' // Lanczos
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'AdvOut',
-      parameterName: 'RescaleRes',
-      parameterValue: dimensions.rescaleResStr
-    });
-
-    // Set video settings
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Video',
-      parameterName: 'BaseCX',
-      parameterValue: dimensions.baseWidthStr
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Video',
-      parameterName: 'BaseCY',
-      parameterValue: dimensions.baseHeightStr
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Video',
-      parameterName: 'OutputCX',
-      parameterValue: dimensions.outputWidthStr
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Video',
-      parameterName: 'OutputCY',
-      parameterValue: dimensions.outputHeightStr
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Video',
-      parameterName: 'ScaleType',
-      parameterValue: 'bilinear'
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Video',
-      parameterName: 'FPSType',
-      parameterValue: '1'
-    });
-
-    await obs.call('SetProfileParameter', {
-      parameterCategory: 'Video',
-      parameterName: 'FPSInt',
-      parameterValue: '65'
-    });
-
-    console.log('✓ Basic parameters configured via WebSocket');
-
-    // Find OBS configuration directory and modify streamEncoder.json
-
-    // Find OBS configuration directory
-    const possibleLocations = [
-      // Windows
-      path.join(os.homedir(), 'AppData', 'Roaming', 'obs-studio'),
-      // macOS
-      path.join(os.homedir(), 'Library', 'Application Support', 'obs-studio'),
-      // Linux
-      path.join(os.homedir(), '.config', 'obs-studio')
-    ];
-
-    let configDir = null;
-    for (const location of possibleLocations) {
-      if (fs.existsSync(location)) {
-        console.log(`Found OBS configuration directory: ${location}`);
-        configDir = location;
-        break;
-      }
-    }
-
-    if (configDir) {
-      // We're using the profileName parameter directly for all operations
-      // No need to read the current profile from global.ini
-
-      // Optional: Configure x264 encoder settings via streamEncoder.json
-      // const streamEncoderPath = path.join(configDir, 'basic', 'profiles', profileName, 'streamEncoder.json');
-      // const x264Settings = {
-      //   "streaming": {
-      //     "encoder": "obs_x264",
-      //     "rate_control": "CBR",
-      //     "bitrate": 6000,
-      //     "preset": "medium",
-      //     "profile": "high",
-      //     "tune": "film",
-      //     "x264opts": "merange=32:ref=16:bframes=16:b-adapt=2:direct=auto:me=tesa:subme=11:trellis=2:rc-lookahead=60"
-      //   }
-      // };
-      // fs.writeFileSync(streamEncoderPath, JSON.stringify(x264Settings, null, 2));
-      // console.log(`✓ Encoder settings written to: ${streamEncoderPath}`);
-
-      console.log('\nAll settings have been applied!');
-      console.log('\nSummary of applied settings:');
-      console.log(`- Output Mode: Advanced`);
-      console.log(`- Encoder: obs_x264`);
-      console.log(`- Rescale: Enabled with Lanczos filter at ${dimensions.rescaleResStr}`);
-      console.log(`- Base Resolution: ${dimensions.actualBaseWidth}x${dimensions.actualBaseHeight} (${width}x${height} with ${dimensions.heightAdjustmentFactor.toFixed(5)} height adjustment)`);
-      console.log(`- Output Resolution: ${dimensions.actualOutputWidth}x${dimensions.actualOutputHeight} (${width}x${height} with ${dimensions.heightAdjustmentFactor.toFixed(5)} height adjustment)`);
-      console.log(`- Scale Type: bilinear`);
-      console.log(`- FPS: 65`);
-      console.log('- x264 Settings: CBR at 6000 kbps, medium preset, high profile, film tune');
-
-      console.log('\nPlease restart OBS to ensure all settings are applied correctly.');
-    } else {
-      console.error('Could not find OBS configuration directory');
-    }
-
-    // Return success result
+    // Return success result with encoder information
     return {
       success: true,
-      profileName,
-      sceneCollectionName,
+      profileName: actualProfileName,
+      sceneCollectionName: actualSceneCollectionName,
       dimensions,
-      message: 'OBS profile and scene collection configured successfully'
+      encoder: recommendedEncoder,
+      message: `OBS profile and scene collection configured successfully using ${recommendedEncoder.type} encoder (${recommendedEncoder.name}). Please restart OBS to apply all settings.`,
+      restartRequired: true
     };
 
   } catch (error) {
@@ -548,41 +610,143 @@ async function manageProfileAndSceneCollection(options) {
       message: 'Failed to configure OBS profile and scene collection'
     };
   }
-  // We don't disconnect here since we're using a shared client
 }
 
 /**
  * Simple function to create or switch to a profile and scene collection with the same name
  * @param {string} name - Name to use for both profile and scene collection
  * @param {string} resolution - Resolution in format "widthxheight" (e.g., "1920x1080")
- * @param {Object} obs - OBS WebSocket client (optional)
+ * @param {string} address - OBS WebSocket address (optional)
+ * @param {string} password - OBS WebSocket password (optional)
  * @returns {Promise<Object>} Result of the operation
  */
-async function configureOBSWithName(name, resolution, obs = getOBSWebSocketClient()) {
-  // Parse resolution
-  let width = 1920;
-  let height = 1080;
-
-  if (resolution) {
-    const match = resolution.replace(/\s+/g, '').match(/(\d+)[xX×](\d+)/);
-    if (match) {
-      width = parseInt(match[1], 10);
-      height = parseInt(match[2], 10);
-    }
-  }
-
+async function configureOBSWithName(name, resolution, address = 'localhost:4455', password = '') {
+  // Use the device name and resolution directly in the manageProfileAndSceneCollection function
   return manageProfileAndSceneCollection({
     profileName: name,
     sceneCollectionName: name,
-    width,
-    height,
-    obs
+    deviceName: name,
+    resolution: resolution,
+    address,
+    password
   });
+}
+
+/**
+ * Add or update a text source
+ * @param {Object} obs - OBS WebSocket client
+ * @param {string} sceneName - Scene name
+ * @param {string} inputKind - Input kind for text sources
+ * @param {string} sourceName - Source name
+ * @param {string} textContent - Text content
+ */
+async function addOrUpdateTextSource(obs, sceneName, inputKind, sourceName, textContent) {
+  try {
+    // Check if the source already exists
+    const { inputs } = await obs.call('GetInputList');
+    const existingSource = inputs.find(input => input.inputName === sourceName);
+
+    if (existingSource) {
+      console.log(`Text source "${sourceName}" already exists. Updating content...`);
+
+      // Update existing source
+      await obs.call('SetInputSettings', {
+        inputName: sourceName,
+        inputSettings: {
+          text: textContent,
+          font: {
+            face: '仓耳舒圆体 W04',
+            size: 256,
+            style: 'Regular',
+            flags: 0
+          }
+        }
+      });
+
+      console.log(`Successfully updated text source "${sourceName}" with content: "${textContent}"`);
+    } else {
+      console.log(`Creating new text source "${sourceName}"...`);
+
+      // Create new source
+      await obs.call('CreateInput', {
+        sceneName: sceneName,
+        inputName: sourceName,
+        inputKind: inputKind,
+        inputSettings: {
+          text: textContent,
+          font: {
+            face: '仓耳舒圆体 W04',
+            size: 256,
+            style: 'Regular',
+            flags: 0
+          }
+        }
+      });
+
+      console.log(`Successfully created text source "${sourceName}" with content: "${textContent}"`);
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`Error adding/updating text source "${sourceName}":`, error);
+    throw error;
+  }
+}
+
+/**
+ * Add or update an image source
+ * @param {Object} obs - OBS WebSocket client
+ * @param {string} sceneName - Scene name
+ * @param {string} inputKind - Input kind for image sources
+ * @param {string} sourceName - Source name
+ * @param {string} filePath - Image file path
+ */
+async function addOrUpdateImageSource(obs, sceneName, inputKind, sourceName, filePath) {
+  try {
+    // Check if the source already exists
+    const { inputs } = await obs.call('GetInputList');
+    const existingSource = inputs.find(input => input.inputName === sourceName);
+
+    if (existingSource) {
+      console.log(`Image source "${sourceName}" already exists. Updating file path...`);
+
+      // Update existing source
+      await obs.call('SetInputSettings', {
+        inputName: sourceName,
+        inputSettings: {
+          file: filePath
+        }
+      });
+
+      console.log(`Successfully updated image source "${sourceName}" with file: "${filePath}"`);
+    } else {
+      console.log(`Creating new image source "${sourceName}"...`);
+
+      // Create new source
+      await obs.call('CreateInput', {
+        sceneName: sceneName,
+        inputName: sourceName,
+        inputKind: inputKind,
+        inputSettings: {
+          file: filePath
+        }
+      });
+
+      console.log(`Successfully created image source "${sourceName}" with file: "${filePath}"`);
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`Error adding/updating image source "${sourceName}":`, error);
+    throw error;
+  }
 }
 
 // Export functions
 export {
   manageProfileAndSceneCollection,
   configureOBSWithName,
-  calculateDimensions
+  calculateDimensions,
+  addOrUpdateTextSource,
+  addOrUpdateImageSource
 };

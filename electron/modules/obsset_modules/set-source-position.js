@@ -182,9 +182,9 @@ async function setSourceTransform(sourceName, x, y, alignment=5, useScale = true
           const canvasHeight = videoSettings.baseHeight;
           console.log(`Canvas height: ${canvasHeight}`);
 
-          // Calculate target height (52/1080 of canvas height)
-          const targetHeight = 52 / 1080 * canvasHeight;
-          console.log(`Target height: ${targetHeight} (52/1080 of canvas height)`);
+          // Calculate target height (55/1080 of canvas height)
+          const targetHeight = 55 / 1080 * canvasHeight;
+          console.log(`Target height: ${targetHeight} (55/1080 of canvas height)`);
 
           // Get current source height in the canvas
           const currentHeight = sceneItemTransform.height;
@@ -304,7 +304,7 @@ console.log(`Source name: "${sourceName}"`);
 console.log(`Transform parameters:`);
 console.log(`- Position: ${x !== null ? 'X=' + x : 'X=unchanged'}, ${y !== null ? 'Y=' + y : 'Y=unchanged'}`);
 console.log(`- Alignment: ${alignment !== null ? alignment : 'unchanged'}`);
-console.log(`- Auto-scale: ${useScale ? 'Enabled (52/1080 of canvas height)' : 'Disabled (keeping current scale)'}`);
+console.log(`- Auto-scale: ${useScale ? 'Enabled (55/1080 of canvas height)' : 'Disabled (keeping current scale)'}`);
 
 // Add more debugging
 process.on('unhandledRejection', (reason, promise) => {
