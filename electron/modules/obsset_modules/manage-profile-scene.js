@@ -16,6 +16,7 @@ import { detectDedicatedGPU, getRecommendedEncoder } from '../../utils/hardware-
 import { addDefaultVideoCaptureDevice } from './video-capture-device.js';
 import { app } from 'electron';
 import pathManager, { PathType } from '../../utils/pathManager.js';
+import { enableAudioSources } from './enable-audio-sources.js';
 
 /**
  * Calculate dimensions based on the provided resolution and adjustment factor
@@ -183,7 +184,7 @@ async function manageProfileAndSceneCollection(options) {
 
           // 添加较长延迟，确保配置文件创建完成
           console.log('Waiting for profile creation to complete...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
           // 切换到新创建的配置文件
           console.log(`Switching to the newly created profile "${actualProfileName}"...`);
@@ -192,7 +193,7 @@ async function manageProfileAndSceneCollection(options) {
 
           // 再次添加延迟，确保配置文件切换完成
           console.log('Waiting for profile switch to complete...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
         // 验证配置文件是否已成功应用
@@ -211,7 +212,7 @@ async function manageProfileAndSceneCollection(options) {
 
         if (profileRetryCount < maxProfileRetries) {
           console.log(`Waiting before profile retry ${profileRetryCount + 1}...`);
-          await new Promise(resolve => setTimeout(resolve, 2000 * profileRetryCount));
+          await new Promise(resolve => setTimeout(resolve, 1000 * profileRetryCount));
         } else {
           console.error(`Failed to handle profile after ${maxProfileRetries} attempts`);
           throw error;
@@ -367,7 +368,7 @@ async function manageProfileAndSceneCollection(options) {
 
     // 添加额外的延迟
     console.log('Profile setup complete. Adding extra delay before scene collection setup...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Step 2: Handle scene collection with improved retry mechanism
     console.log('\n--- Scene Collection Management ---');
@@ -407,7 +408,7 @@ async function manageProfileAndSceneCollection(options) {
 
             // 添加较长延迟，确保场景集合切换完成
             console.log('Waiting for scene collection switch to complete...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 1000));
           } else {
             console.log(`Already using scene collection "${actualSceneCollectionName}"`);
           }
@@ -416,7 +417,7 @@ async function manageProfileAndSceneCollection(options) {
 
           // 添加较长延迟，确保OBS准备好创建新场景集合
           console.log('Preparing to create new scene collection...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
           // 使用try-catch单独处理创建场景集合的操作
           try {
@@ -425,13 +426,13 @@ async function manageProfileAndSceneCollection(options) {
 
             // 添加较长延迟，确保场景集合创建完成
             console.log('Waiting for scene collection creation to complete...');
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            await new Promise(resolve => setTimeout(resolve, 1000));
           } catch (createError) {
             console.error(`Error creating scene collection: ${createError.message}`);
 
             if (createError.code === 600) {
               console.log('Received error code 600. This usually means OBS is busy. Waiting longer...');
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              await new Promise(resolve => setTimeout(resolve, 1000));
 
               // 尝试再次创建
               console.log('Trying to create scene collection again...');
@@ -439,7 +440,7 @@ async function manageProfileAndSceneCollection(options) {
               console.log(`Successfully created scene collection "${actualSceneCollectionName}" on second attempt`);
 
               // 添加更长延迟
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              await new Promise(resolve => setTimeout(resolve, 1000));
             } else {
               throw createError; // 重新抛出其他错误
             }
@@ -450,7 +451,7 @@ async function manageProfileAndSceneCollection(options) {
 
         // 验证场景集合是否已成功应用
         console.log('Verifying scene collection...');
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 验证前添加延迟
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 验证前添加延迟
 
         const verifySceneCollectionResponse = await obs.call('GetSceneCollectionList');
         const currentSceneCollectionAfterSwitch = verifySceneCollectionResponse.currentSceneCollectionName;
@@ -472,13 +473,39 @@ async function manageProfileAndSceneCollection(options) {
             console.log(`Current Scene: ${currentProgramSceneName}`);
 
             // 获取可用的输入类型
+            console.log('Getting available input kinds...');
             const { inputKinds } = await obs.call('GetInputKindList');
-            const textInputKind = inputKinds.find(kind => kind === 'text_gdiplus_v3') ||
-              inputKinds.find(kind => kind.includes('text_gdiplus'));
-            const imageInputKind = inputKinds.find(kind => kind === 'image_source');
+            console.log('Available input kinds:', inputKinds);
 
-            if (!textInputKind) {
-              console.warn('No text input kind found in OBS. Text sources will not be created.');
+            // 查找图像和文本输入类型
+            let imageInputKind = null;
+            let textInputKind = null;
+
+            // 查找图像输入类型 (image_source, ffmpeg_source)
+            for (const kind of ['image_source', 'ffmpeg_source']) {
+              if (inputKinds.includes(kind)) {
+                imageInputKind = kind;
+                console.log(`Found image input kind: ${imageInputKind}`);
+                break;
+              }
+            }
+
+            // 查找文本输入类型 (text_gdiplus_v2, text_ft2_source_v2)
+            for (const kind of ['text_gdiplus_v2', 'text_ft2_source_v2']) {
+              if (inputKinds.includes(kind)) {
+                textInputKind = kind;
+                console.log(`Found text input kind: ${textInputKind}`);
+                break;
+              }
+            }
+
+            // 0.添加桌面音频和麦克风源
+            console.log('\n0. Adding audio sources...');
+            try {
+              const audioResult = await enableAudioSources({ obs });
+              console.log(`Audio sources result: ${audioResult.success ? 'Success' : 'Failed'}`);
+            } catch (audioError) {
+              console.warn(`Warning: Failed to enable audio sources: ${audioError.message}`);
             }
 
             // 1. 添加视频采集设备
@@ -490,56 +517,59 @@ async function manageProfileAndSceneCollection(options) {
               console.warn(`Warning: Failed to add video capture device: ${videoError.message}`);
             }
 
-            // 2. 添加图像源 "动图"
-            if (imageInputKind) {
-              console.log('\n2. Adding image source for "动图"...');
-              try {
-                // 这里可以设置一个默认图片路径，或者从参数中获取
-                // 使用pathManager获取应用根目录，确保在开发和生产环境中都能正确找到图片
-                let imagePath;
-                if (app.isPackaged) {
-                  // 生产环境路径
-                  imagePath = path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'public', 'images', 'winer.gif');
-                } else {
-                  // 开发环境路径
-                  imagePath = path.join(app.getAppPath(), 'public', 'images', 'winer.gif');
+            if(dimensions.rescaleWidth >= dimensions.rescaleHeight){
+
+              // 2. 添加图像源 "动图"
+              if (imageInputKind) {
+                console.log('\n2. Adding image source for "动图"...');
+                try {
+                  // 这里可以设置一个默认图片路径，或者从参数中获取
+                  // 使用pathManager获取应用根目录，确保在开发和生产环境中都能正确找到图片
+                  let imagePath;
+                  if (app.isPackaged) {
+                    // 生产环境路径
+                    imagePath = path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'public', 'images', 'winer.gif');
+                  } else {
+                    // 开发环境路径
+                    imagePath = path.join(app.getAppPath(), 'public', 'images', 'winer.gif');
+                  }
+                  console.log(`动图GIF路径: ${imagePath}`);
+                  if (imagePath) {
+                    await addOrUpdateImageSource(obs, currentProgramSceneName, imageInputKind, '动图', imagePath);
+                  } else {
+                    console.log('No image path provided for "动图". Skipping image source creation.');
+                  }
+                } catch (imageError) {
+                  console.warn(`Warning: Failed to add image source "动图": ${imageError.message}`);
                 }
-                console.log(`动图GIF路径: ${imagePath}`);
-                if (imagePath) {
-                  await addOrUpdateImageSource(obs, currentProgramSceneName, imageInputKind, '动图', imagePath);
-                } else {
-                  console.log('No image path provided for "动图". Skipping image source creation.');
+              } else {
+                console.warn('No image input kind found in OBS. Image source will not be created.');
+              }
+
+              if (textInputKind) {
+                // 3. 添加文本源 "榜一"
+                console.log('\n3. Adding text source for "榜一"...');
+                try {
+                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一：XXXX');
+                } catch (textError) {
+                  console.warn(`Warning: Failed to add text source "榜一": ${textError.message}`);
                 }
-              } catch (imageError) {
-                console.warn(`Warning: Failed to add image source "动图": ${imageError.message}`);
-              }
-            } else {
-              console.warn('No image input kind found in OBS. Image source will not be created.');
-            }
 
-            if (textInputKind) {
-              // 3. 添加文本源 "榜一"
-              console.log('\n3. Adding text source for "榜一"...');
-              try {
-                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一：XXXX');
-              } catch (textError) {
-                console.warn(`Warning: Failed to add text source "榜一": ${textError.message}`);
-              }
+                // 4. 添加文本源 "设备" 显示设备型号名称
+                console.log('\n4. Adding text source for "设备"...');
+                try {
+                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '设备', `设备：${deviceName || actualProfileName}`);
+                } catch (textError) {
+                  console.warn(`Warning: Failed to add text source "设备": ${textError.message}`);
+                }
 
-              // 4. 添加文本源 "设备" 显示设备型号名称
-              console.log('\n4. Adding text source for "设备"...');
-              try {
-                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '设备', `设备：${deviceName || actualProfileName}`);
-              } catch (textError) {
-                console.warn(`Warning: Failed to add text source "设备": ${textError.message}`);
-              }
-
-              // 5. 添加文本源 "消费"
-              console.log('\n5. Adding text source for "消费"...');
-              try {
-                await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '消费', '禁止未成年消费');
-              } catch (textError) {
-                console.warn(`Warning: Failed to add text source "消费": ${textError.message}`);
+                // 5. 添加文本源 "消费"
+                console.log('\n5. Adding text source for "消费"...');
+                try {
+                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '消费', '禁止未成年消费');
+                } catch (textError) {
+                  console.warn(`Warning: Failed to add text source "消费": ${textError.message}`);
+                }
               }
             }
 

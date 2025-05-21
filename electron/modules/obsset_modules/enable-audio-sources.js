@@ -5,7 +5,7 @@
  * 1. Desktop Audio (wasapi_output_capture)
  * 2. Microphone/AUX (wasapi_input_capture)
  *
- * It also adds a noise suppression filter to the desktop audio source.
+ * It also adds a noise suppression filter to the microphone audio source.
  */
 
 // Import OBS WebSocket
@@ -108,20 +108,11 @@ async function enableAudioSources(options = {}) {
             'device_id': 'default'
           }
         });
-        console.log(`Successfully created microphone/AUX audio source: ${micAudio}`);
-      } catch (error) {
-        console.error(`Error creating microphone/AUX audio source: ${error.message}`);
-      }
-    } else {
-      console.log(`Microphone/AUX audio source already exists: ${micAudio}`);
-    }
 
-    // Apply noise suppression filter to desktop audio
-    if (desktopAudioExists || !desktopAudioExists) {
-      try {
-        // Check if the filter already exists
+        // Apply noise suppression filter to microphone audio
+
         const { filters } = await obs.call('GetSourceFilterList', {
-          sourceName: desktopAudio
+          sourceName: micAudio
         });
 
         const noiseSuppressFilterExists = filters.some(filter =>
@@ -129,20 +120,24 @@ async function enableAudioSources(options = {}) {
         );
 
         if (!noiseSuppressFilterExists) {
-          console.log(`Adding noise suppression filter to ${desktopAudio}`);
+          console.log(`Adding noise suppression filter to ${micAudio}`);
           await obs.call('CreateSourceFilter', {
-            sourceName: desktopAudio,
+            sourceName: micAudio,
             filterName: noiseSuppressionFilter,
             filterKind: 'noise_suppress_filter_v2',
             filterSettings: {}
           });
-          console.log(`Successfully added noise suppression filter to ${desktopAudio}`);
+          console.log(`Successfully added noise suppression filter to ${micAudio}`);
         } else {
-          console.log(`Noise suppression filter already exists for ${desktopAudio}`);
+          console.log(`Noise suppression filter already exists for ${micAudio}`);
         }
+
+        console.log(`Successfully created microphone/AUX audio source: ${micAudio}`);
       } catch (error) {
-        console.error(`Error configuring noise suppression filter: ${error.message}`);
+        console.error(`Error creating microphone/AUX audio source: ${error.message}`);
       }
+    } else {
+      console.log(`Microphone/AUX audio source already exists: ${micAudio}`);
     }
 
     console.log('\nAudio sources setup completed successfully!');

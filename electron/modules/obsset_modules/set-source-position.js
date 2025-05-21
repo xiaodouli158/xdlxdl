@@ -192,10 +192,10 @@ async function setSourceTransform(obs, sourceName, posx, posy, alignment = 5, us
 }
 
 async function configureSourceTransform(address = 'localhost:4455', password = '') {
-  try {
-    // 创建一个新的OBS WebSocket连接，而不是使用共享实例
-    let obs = null;
+  // 创建一个新的OBS WebSocket连接，而不是使用共享实例
+  let obs = null;
 
+  try {
     // 使用obsWebSocketHandlers.js中的ensureAndConnectToOBS函数连接到OBS
     console.log('正在连接到OBS WebSocket...');
     const connectResult = await ensureAndConnectToOBS(address, password);
@@ -223,7 +223,23 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
     const videoSettings = await obs.call('GetVideoSettings');
     const posHeight = videoSettings.baseHeight;
     const posWidth = videoSettings.baseWidth;
-    
+    // 检测是否为竖屏模式（宽小于高）
+    const isPortrait = posWidth < posHeight;
+    if (isPortrait) {
+      console.log('Portrait orientation detected (width < height). Using portrait layout.');
+    } else {
+      console.log('Landscape orientation detected (width >= height). Using landscape layout.');
+    }
+
+    if (posWidth < posHeight) {
+      console.log('宽小于高，不进行自动布局');
+      return {
+        success: false,
+        profileName: currentProfileName,
+        message: '宽小于高，不进行自动布局'
+      };
+    }
+
     // Position all sources
     console.log('Positioning "动图" source...');
     try {
@@ -232,24 +248,24 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
     } catch (error) {
       console.warn(`Warning: Failed to position "动图" source: ${error.message}`);
     }
-    
+
     console.log('Positioning "榜一" source...');
     try {
-      const imagewidth = (posHeight*55/1080*567/376)+5;
+      const imagewidth = (posHeight * 55 / 1080 * 567 / 376) + 5;
       await setSourceTransform(obs, '榜一', imagewidth, posHeight, 9, true);
       console.log('Successfully positioned "榜一" source');
     } catch (error) {
       console.warn(`Warning: Failed to position "榜一" source: ${error.message}`);
     }
-    
+
     console.log('Positioning "设备" source...');
     try {
-      await setSourceTransform(obs, '设备', posWidth/2, posHeight, 8, true);
+      await setSourceTransform(obs, '设备', posWidth / 2, posHeight, 8, true);
       console.log('Successfully positioned "设备" source');
     } catch (error) {
       console.warn(`Warning: Failed to position "设备" source: ${error.message}`);
     }
-    
+
     console.log('Positioning "消费" source...');
     try {
       await setSourceTransform(obs, '消费', posWidth, posHeight, 10, true);
@@ -257,7 +273,7 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
     } catch (error) {
       console.warn(`Warning: Failed to position "消费" source: ${error.message}`);
     }
-    
+
     console.log('All sources positioned successfully');
     return {
       success: true,
@@ -268,13 +284,18 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
     console.error('Error during source transformation:', error.message);
     return {
       success: false,
+      profileName: currentProfileName,
       message: `Error during source transformation: ${error.message}`
     };
-  }finally {
+  } finally {
     // Disconnect from OBS WebSocket
-    if (obs && obs.identified) {
-      await obs.disconnect();
-      console.log('Disconnected from OBS WebSocket');
+    try {
+      if (obs && obs.identified) {
+        await obs.disconnect();
+        console.log('Disconnected from OBS WebSocket');
+      }
+    } catch (disconnectError) {
+      console.error('Error disconnecting from OBS WebSocket:', disconnectError.message);
     }
   }
 }
