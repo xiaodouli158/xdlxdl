@@ -550,7 +550,7 @@ async function manageProfileAndSceneCollection(options) {
                 // 3. 添加文本源 "榜一"
                 console.log('\n3. Adding text source for "榜一"...');
                 try {
-                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一：XXXX');
+                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一:XXXX');
                 } catch (textError) {
                   console.warn(`Warning: Failed to add text source "榜一": ${textError.message}`);
                 }
@@ -558,7 +558,7 @@ async function manageProfileAndSceneCollection(options) {
                 // 4. 添加文本源 "设备" 显示设备型号名称
                 console.log('\n4. Adding text source for "设备"...');
                 try {
-                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '设备', `设备：${deviceName || actualProfileName}`);
+                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '设备', `设备:${deviceName || actualProfileName}`);
                 } catch (textError) {
                   console.warn(`Warning: Failed to add text source "设备": ${textError.message}`);
                 }

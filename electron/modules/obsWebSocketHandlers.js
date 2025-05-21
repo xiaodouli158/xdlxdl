@@ -6,7 +6,7 @@ import os from 'os';
 import { exec } from 'child_process';
 import OBSWebSocket from 'obs-websocket-js';
 import { getSoftwarePath } from '../utils/Findsoftpaths.js';
-import { closeProgram } from './Process_close_by_ahk.js';
+import { closeOBS } from '../utils/close-obs-direct.js';
 
 // 将回调函数转换为 Promise
 const fsReadFile = promisify(fs.readFile);
@@ -241,20 +241,36 @@ async function checkIfOBSIsRunning() {
  */
 async function closeOBSProcess() {
   try {
-    // 使用通用程序关闭接口关闭OBS  
-    const result = await closeProgram({
-      exeName: 'obs64.exe',
-      confirmDialogTitles: ['Exit OBS', 'OBS Studio'],
-      updateScript: false
-    });
+    console.log('使用 close-obs-direct.js 关闭 OBS 进程...');
 
-    if (result.success) {
-      console.log('成功关闭 OBS 进程');
+    // 使用 close-obs-direct.js 中的 closeOBS 函数关闭 OBS
+    const result = await closeOBS();
+
+    if (result.status === 'not_running') {
+      console.log('OBS 未运行，无需关闭');
+      return {
+        success: true,
+        message: 'OBS 未运行，无需关闭'
+      };
+    } else if (result.status === 'gracefully_closed') {
+      console.log('成功优雅地关闭 OBS 进程');
+      return {
+        success: true,
+        message: '成功优雅地关闭 OBS 进程'
+      };
+    } else if (result.status === 'force_closed') {
+      console.log('成功强制关闭 OBS 进程');
+      return {
+        success: true,
+        message: '成功强制关闭 OBS 进程'
+      };
     } else {
-      console.log('关闭 OBS 进程失败:', result.message);
+      console.log('关闭 OBS 进程失败，未知状态:', result.status);
+      return {
+        success: false,
+        message: '关闭 OBS 进程失败，未知状态: ' + result.status
+      };
     }
-
-    return result;
   } catch (error) {
     console.error('关闭 OBS 进程时出错:', error);
     return {
@@ -262,7 +278,6 @@ async function closeOBSProcess() {
       message: '关闭 OBS 进程时出错: ' + error.message
     };
   }
-
 }
 
 /**

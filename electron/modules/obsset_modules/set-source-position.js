@@ -34,6 +34,21 @@
 import { ensureAndConnectToOBS } from '../obsWebSocketHandlers.js';
 
 /**
+ * Format device name to OBS profile name format
+ * Replaces spaces with underscores and removes all special characters
+ * @param {string} deviceName - The device name to format
+ * @returns {string} - Formatted profile name
+ */
+function formatProfileName(deviceName) {
+  if (!deviceName) return '';
+  // Replace spaces with underscores
+  let formatted = deviceName.replace(/\s+/g, '_');
+  // Remove all special characters (including dots, +, -, ', ", (, ), =, etc.)
+  formatted = formatted.replace(/[^\w_]/g, '');
+  return formatted;
+}
+
+/**
  * Sets the position, alignment, and optionally applies automatic scaling to a source in the current OBS scene
  * @param {string} sourceName - The name of the source to transform
  * @param {number|null} x - The X coordinate (horizontal position), null to keep current value
@@ -194,6 +209,9 @@ async function setSourceTransform(obs, sourceName, posx, posy, alignment = 5, us
 async function configureSourceTransform(address = 'localhost:4455', password = '') {
   // 创建一个新的OBS WebSocket连接，而不是使用共享实例
   let obs = null;
+  let currentProfileName = '';
+  let formattedProfileName = '';
+  let parameterresult = null;
 
   try {
     // 使用obsWebSocketHandlers.js中的ensureAndConnectToOBS函数连接到OBS
@@ -218,7 +236,16 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
 
     // Get OBS profile name
     const { currentProfileName } = await obs.call('GetProfileList');
+
+    // Format profile name according to OBS standard
+    const formattedProfileName = formatProfileName(currentProfileName);
+
     console.log(`Current Profile: ${currentProfileName}`);
+    console.log(`Formatted Profile Name: ${formattedProfileName}`);
+    const parameterresult = await obs.call('GetProfileParameter', {
+      parameterCategory: 'AdvOut',
+      parameterName: 'Encoder'
+    });
 
     const videoSettings = await obs.call('GetVideoSettings');
     const posHeight = videoSettings.baseHeight;
@@ -235,7 +262,8 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
       console.log('宽小于高，不进行自动布局');
       return {
         success: false,
-        profileName: currentProfileName,
+        profileName: formattedProfileName,
+        Encodername: parameterresult.parameterValue,
         message: '宽小于高，不进行自动布局'
       };
     }
@@ -277,14 +305,21 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
     console.log('All sources positioned successfully');
     return {
       success: true,
-      profileName: currentProfileName,
+      profileName: formattedProfileName,
+      Encodername: parameterresult.parameterValue,
       message: 'All sources positioned successfully'
     };
   } catch (error) {
     console.error('Error during source transformation:', error.message);
+    // 如果在错误处理中，formattedProfileName可能未定义，所以需要再次格式化
+    const profileNameToUse = typeof formattedProfileName !== 'undefined'
+      ? formattedProfileName
+      : (currentProfileName ? formatProfileName(currentProfileName) : '');
+
     return {
       success: false,
-      profileName: currentProfileName,
+      profileName: profileNameToUse,
+      Encodername: parameterresult ? parameterresult.parameterValue : '',
       message: `Error during source transformation: ${error.message}`
     };
   } finally {
