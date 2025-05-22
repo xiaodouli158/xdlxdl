@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { promisify } from 'util';
-import { getRecommendedEncoder } from '../../utils/hardware-info.js';
+
 
 // Convert callback functions to Promises
 const fsWriteFile = promisify(fs.writeFile);
@@ -37,39 +37,36 @@ async function configureEncoder(encoderName, profileName = null) {
     console.log('Configuring OBS encoder settings...');
     console.log('Encoder name:', encoderName);
 
-    let encoderConfig;
-    if(encoderName === 'obs_x264'){
-      encoderConfig = {
-        bitrate: 18000,
-        keyint_sec: 2,
-        preset: 'medium',
-        profile:"high"
-      }
+    let encoderConfig = {
+      bitrate: 18000,
+      keyint_sec: 2,
+      preset: 'medium',
+      profile:"high"
     }
-    else if(encoderName === 'jim_nvenc'){
+    if(encoderName === 'jim_nvenc'){
       encoderConfig = {
-        encoder: 'nvenc',
         bitrate: 20000,
         keyint_sec: 2,
         preset: 'p7',
         profile:"high"
       }
     }
-    else if(encoderName === 'obs_amf_h264'){
+    else if(encoderName === 'amd_amf_h264'){
       encoderConfig = {
-        encoder: 'amf',
         bitrate: 20000,
         keyint_sec: 2,
         quality: 'quality',
         profile:"high"
       }
     }
-    else{
-      return {
-        success: false,
-        message: 'Invalid encoder name'
+    else if(encoderName === 'obs_qsv11_v2'){
+      encoderConfig = {
+        bitrate: 18000,
+        keyint_sec: 2,
+        target_usage: 'TU1',
       }
     }
+
 
     console.log('Encoder configuration:', encoderConfig);
 

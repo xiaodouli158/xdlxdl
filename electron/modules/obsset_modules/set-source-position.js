@@ -259,12 +259,12 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
     }
 
     if (posWidth < posHeight) {
-      console.log('宽小于高，不进行自动布局');
+      console.log('竖屏直播间配置,不需要添加说明栏');
       return {
-        success: false,
+        success: true,
         profileName: formattedProfileName,
         Encodername: parameterresult.parameterValue,
-        message: '宽小于高，不进行自动布局'
+        message: '竖屏直播间配置,不需要添加说明栏'
       };
     }
 

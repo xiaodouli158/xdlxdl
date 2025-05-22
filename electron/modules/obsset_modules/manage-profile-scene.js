@@ -12,7 +12,7 @@ import path from 'path';
 import os from 'os';
 import OBSWebSocket from 'obs-websocket-js';
 import { ensureAndConnectToOBS } from '../obsWebSocketHandlers.js';
-import { detectDedicatedGPU, getRecommendedEncoder } from '../../utils/hardware-info.js';
+import { getSystemInfo } from '../../utils/hardware-info.js';
 import { addDefaultVideoCaptureDevice } from './video-capture-device.js';
 import { app } from 'electron';
 import pathManager, { PathType } from '../../utils/pathManager.js';
@@ -253,7 +253,7 @@ async function manageProfileAndSceneCollection(options) {
 
     // 获取推荐的编码器
     console.log('Detecting available hardware encoders...');
-    const recommendedEncoder = await getRecommendedEncoder();
+    const recommendedEncoder = await getSystemInfo();
     // console.log('Recommended encoder:', recommendedEncoder.name);
 
     // // 根据硬件配置编码器设置
@@ -344,7 +344,7 @@ async function manageProfileAndSceneCollection(options) {
       {
         parameterCategory: 'AdvOut',
         parameterName: 'Encoder',
-        parameterValue: recommendedEncoder.name
+        parameterValue: recommendedEncoder.encoder
       },
       // 重新缩放设置
       {
