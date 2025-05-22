@@ -36,6 +36,7 @@ import { ensureAndConnectToOBS } from '../obsWebSocketHandlers.js';
 /**
  * Format device name to OBS profile name format
  * Replaces spaces with underscores and removes all special characters
+ * Preserves Chinese characters, letters, numbers, and underscores
  * @param {string} deviceName - The device name to format
  * @returns {string} - Formatted profile name
  */
@@ -43,8 +44,14 @@ function formatProfileName(deviceName) {
   if (!deviceName) return '';
   // Replace spaces with underscores
   let formatted = deviceName.replace(/\s+/g, '_');
-  // Remove all special characters (including dots, +, -, ', ", (, ), =, etc.)
-  formatted = formatted.replace(/[^\w_]/g, '');
+  // Remove all special characters while preserving:
+  // - Chinese characters (CJK Unified Ideographs: \u4e00-\u9fff)
+  // - Chinese characters (CJK Extension A: \u3400-\u4dbf)
+  // - Chinese characters (CJK Compatibility Ideographs: \uf900-\ufaff)
+  // - Letters (a-z, A-Z)
+  // - Numbers (0-9)
+  // - Underscores (_)
+  formatted = formatted.replace(/[^\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaffa-zA-Z0-9_]/g, '');
   return formatted;
 }
 

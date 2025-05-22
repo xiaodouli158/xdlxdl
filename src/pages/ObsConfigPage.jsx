@@ -18,6 +18,14 @@ function ObsConfigPage() {
   const [configError, setConfigError] = useState('');
   const [configSteps, setConfigSteps] = useState([]);
 
+  // 硬件信息状态
+  const [hardwareInfo, setHardwareInfo] = useState({
+    cpu: '获取中...',
+    memory: '获取中...',
+    gpu: '获取中...',
+    resolution: '获取中...'
+  });
+
   // 初始化选择第一个设备
   useEffect(() => {
     // 重置所有选择框
@@ -48,8 +56,18 @@ function ObsConfigPage() {
         setSelectedDevice(phoneModels[0]);
       }
     } else if (deviceType === 'computer') {
-      // 电脑模式暂无设备数据
-      setSelectedDevice(null);
+      // 电脑模式使用硬件信息创建虚拟设备对象
+      const computerDevice = {
+        id: 'computer',
+        name: 'PC端游',
+        brand: '电脑',
+        resolution: hardwareInfo.resolution || '1920x1080',
+        aspectRatio: '16:9',
+        os: 'Windows',
+        screenSize: '自定义尺寸',
+        category: 'computer'
+      };
+      setSelectedDevice(computerDevice);
     } else if (deviceType === 'custom') {
       // 创建自定义设备对象
       const customDevice = {
@@ -68,6 +86,45 @@ function ObsConfigPage() {
     // 添加日志，帮助调试
     console.log('设备类型变更:', deviceType);
   }, [deviceType, customName, customResolution]);
+
+  // 获取硬件信息
+  useEffect(() => {
+    const getHardwareInfo = async () => {
+      try {
+        if (typeof window !== 'undefined' && window.electron) {
+          const systemInfo = await window.electron.getSystemInfo();
+          setHardwareInfo(systemInfo);
+        }
+      } catch (error) {
+        console.error('获取硬件信息失败:', error);
+        setHardwareInfo({
+          cpu: '获取失败',
+          memory: '获取失败',
+          gpu: '获取失败',
+          resolution: '获取失败'
+        });
+      }
+    };
+
+    getHardwareInfo();
+  }, []);
+
+  // 当硬件信息更新且当前是电脑设备类型时，更新selectedDevice
+  useEffect(() => {
+    if (deviceType === 'computer' && hardwareInfo.resolution !== '获取中...') {
+      const computerDevice = {
+        id: 'computer',
+        name: 'PC端游',
+        brand: '电脑',
+        resolution: hardwareInfo.resolution,
+        aspectRatio: '16:9',
+        os: 'Windows',
+        screenSize: '自定义尺寸',
+        category: 'computer'
+      };
+      setSelectedDevice(computerDevice);
+    }
+  }, [deviceType, hardwareInfo]);
 
 
 
@@ -89,7 +146,8 @@ function ObsConfigPage() {
 
   // 配置OBS的函数
   const configureOBS = async () => {
-    if (!selectedDevice) {
+    // 对于电脑设备类型，不需要选择具体设备，直接使用硬件信息
+    if (deviceType !== 'computer' && !selectedDevice) {
       setConfigStatus('error');
       setConfigError('请先选择一个设备');
       setConfigMessage('配置失败：未选择设备');
@@ -105,11 +163,26 @@ function ObsConfigPage() {
       // 清空配置步骤
       setConfigSteps([]);
 
+      let configOptions;
+
+      // 根据设备类型确定配置选项
+      if (deviceType === 'computer') {
+        // 电脑设备使用硬件信息配置
+        configOptions = {
+          deviceName: 'PC端游',
+          resolution: hardwareInfo.resolution
+        };
+      } else {
+        // 其他设备类型使用选中的设备信息
+        configOptions = {
+          deviceName: selectedDevice.name,
+          resolution: selectedDevice.resolution
+        };
+      }
+
       // 使用一键配置OBS功能
-      const result = await window.electron.oneClickConfigureObs({
-        deviceName: selectedDevice.name,
-        resolution: selectedDevice.resolution
-      });
+      console.log('配置OBS参数:', configOptions);
+      const result = await window.electron.oneClickConfigureObs(configOptions);
 
       console.log('一键配置OBS结果:', result);
 
@@ -404,7 +477,25 @@ function ObsConfigPage() {
             {/* 左侧选择区域 */}
             <div className="flex-1">
               <div className="p-4 bg-gray-800 rounded-md">
-                <p className="text-gray-300">电脑设备配置选项将在此显示</p>
+                <h3 className="text-lg font-medium text-indigo-300 mb-4">硬件信息</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-300 text-sm">CPU型号：</span>
+                    <span className="text-gray-100 text-sm font-medium">{hardwareInfo.cpu}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-300 text-sm">显卡型号：</span>
+                    <span className="text-gray-100 text-sm font-medium">{hardwareInfo.gpu}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-300 text-sm">内存大小：</span>
+                    <span className="text-gray-100 text-sm font-medium">{hardwareInfo.memory}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-300 text-sm">主显示器：</span>
+                    <span className="text-gray-100 text-sm font-medium">{hardwareInfo.resolution}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -424,10 +515,10 @@ function ObsConfigPage() {
                     电脑(Windows/自定义尺寸)
                   </div>
                   <div className="text-indigo-300 font-semibold text-xs mb-1 truncate">
-                    电脑设备
+                    PC端游
                   </div>
                   <div className="text-gray-400 text-xs truncate">
-                    1920 x 1080
+                    {hardwareInfo.resolution}
                   </div>
                 </div>
               </div>

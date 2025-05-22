@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('electron', {
   // 应用信息
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
+  // 系统硬件信息
+  getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+
   // 事件监听
   onAuthNotification: (callback) => {
     ipcRenderer.on('auth-notification', (event, data) => callback(data));

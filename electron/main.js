@@ -14,6 +14,7 @@ import { registerOBSConfigHandlers } from './modules/obsConfigHandlers.js';
 import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
 import { initializePaths } from './utils/pathManager.js';
 import { initUpdateChecker } from '../build/update-checker.js';
+import { getSystemInfo } from './utils/hardware-info.js';
 
 // 将回调函数转换为 Promise
 const execAsync = promisify(exec);
@@ -243,6 +244,24 @@ app.whenReady().then(async () => {
     } catch (e) {
       console.error('获取直播伴侣版本时出错:', e);
       return '未检测到';
+    }
+  });
+
+  // 获取系统硬件信息
+  ipcMain.handle('get-system-info', async () => {
+    try {
+      console.log('正在获取系统硬件信息...');
+      const systemInfo = await getSystemInfo();
+      console.log('系统硬件信息获取结果:', systemInfo);
+      return systemInfo;
+    } catch (e) {
+      console.error('获取系统硬件信息时出错:', e);
+      return {
+        cpu: '未检测到',
+        memory: '未检测到',
+        gpu: '未检测到',
+        resolution: '未检测到'
+      };
     }
   });
 
