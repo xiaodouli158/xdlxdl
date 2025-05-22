@@ -10,12 +10,11 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import OBSWebSocket from 'obs-websocket-js';
 import { ensureAndConnectToOBS } from '../obsWebSocketHandlers.js';
 import { getSystemInfo } from '../../utils/hardware-info.js';
 import { addDefaultVideoCaptureDevice } from './video-capture-device.js';
+import createDisplayCaptureSource from './create-display-capture.js';
 import { app } from 'electron';
-import pathManager, { PathType } from '../../utils/pathManager.js';
 import { enableAudioSources } from './enable-audio-sources.js';
 
 /**
@@ -256,89 +255,6 @@ async function manageProfileAndSceneCollection(options) {
     const recommendedEncoder = await getSystemInfo();
     // console.log('Recommended encoder:', recommendedEncoder.name);
 
-    // // 根据硬件配置编码器设置
-    // if (recommendedEncoder.type === 'hardware') {
-    //   console.log(`Using hardware encoder: ${recommendedEncoder.name}`);
-
-    //   // 配置硬件编码器参数
-    //   const encoderParams = [
-    //     {
-    //       parameterCategory: 'AdvOut',
-    //       parameterName: 'Encoder',
-    //       parameterValue: recommendedEncoder.name
-    //     }
-    //   ];
-
-    //   // 配置NVIDIA NVENC特定设置
-    //   if (recommendedEncoder.name === 'jim_nvenc') {
-    //     console.log('Configuring NVIDIA NVENC settings');
-
-    //     encoderParams.push(
-    //       {
-    //         parameterCategory: 'AdvOut',
-    //         parameterName: 'NVENCPreset',
-    //         parameterValue: recommendedEncoder.preset
-    //       },
-    //       {
-    //         parameterCategory: 'AdvOut',
-    //         parameterName: 'NVENCProfile',
-    //         parameterValue: 'high'
-    //       },
-    //       {
-    //         parameterCategory: 'AdvOut',
-    //         parameterName: 'NVENCPsychoVisualTuning',
-    //         parameterValue: 'true'
-    //       },
-    //       {
-    //         parameterCategory: 'AdvOut',
-    //         parameterName: 'NVENCLookAhead',
-    //         parameterValue: 'true'
-    //       }
-    //     );
-    //   }
-    //   // 配置AMD AMF特定设置
-    //   else if (recommendedEncoder.name === 'amd_amf_h264') {
-    //     console.log('Configuring AMD AMF settings');
-
-    //     encoderParams.push(
-    //       {
-    //         parameterCategory: 'AdvOut',
-    //         parameterName: 'AMFPreset',
-    //         parameterValue: recommendedEncoder.preset
-    //       },
-    //       {
-    //         parameterCategory: 'AdvOut',
-    //         parameterName: 'AMFProfile',
-    //         parameterValue: 'high'
-    //       }
-    //     );
-    //   }
-
-    //   // 应用编码器设置
-    //   await setProfileParameters(obs, encoderParams);
-    // } else {
-    //   console.log('Using software encoder: x264');
-
-    //   // 配置软件编码器(x264)参数
-    //   await setProfileParameters(obs, [
-    //     {
-    //       parameterCategory: 'AdvOut',
-    //       parameterName: 'Encoder',
-    //       parameterValue: 'obs_x264'
-    //     },
-    //     {
-    //       parameterCategory: 'AdvOut',
-    //       parameterName: 'Preset',
-    //       parameterValue: 'veryfast'
-    //     },
-    //     {
-    //       parameterCategory: 'AdvOut',
-    //       parameterName: 'Profile',
-    //       parameterValue: 'high'
-    //     }
-    //   ]);
-    // }
-
     // 设置重新缩放和比特率设置
     await setProfileParameters(obs, [
       {
@@ -508,16 +424,28 @@ async function manageProfileAndSceneCollection(options) {
               console.warn(`Warning: Failed to enable audio sources: ${audioError.message}`);
             }
 
-            // 1. 添加视频采集设备
-            console.log('\n1. Adding video capture device...');
-            try {
-              const videoResult = await addDefaultVideoCaptureDevice(actualWidth, actualHeight, obs);
-              console.log(`Video capture device result: ${videoResult.success ? 'Success' : 'Failed'}`);
-            } catch (videoError) {
-              console.warn(`Warning: Failed to add video capture device: ${videoError.message}`);
+            if (actualProfileName == 'PC端游') {
+              //1.添加显示器采集
+              console.log('\n1. Adding display capture...');
+              try {
+                const displayResult = await createDisplayCaptureSource(obs);
+                console.log(`Display capture result: ${displayResult.success ? 'Success' : 'Failed'}`);
+              } catch (displayError) {
+                console.warn(`Warning: Failed to add display capture: ${displayError.message}`);
+              }
+
+            } else {
+              // 1. 添加视频采集设备
+              console.log('\n1. Adding video capture device...');
+              try {
+                const videoResult = await addDefaultVideoCaptureDevice(actualWidth, actualHeight, obs);
+                console.log(`Video capture device result: ${videoResult.success ? 'Success' : 'Failed'}`);
+              } catch (videoError) {
+                console.warn(`Warning: Failed to add video capture device: ${videoError.message}`);
+              }
             }
 
-            if(dimensions.rescaleWidth >= dimensions.rescaleHeight){
+            if (dimensions.rescaleWidth >= dimensions.rescaleHeight) {
 
               // 2. 添加图像源 "动图"
               if (imageInputKind) {

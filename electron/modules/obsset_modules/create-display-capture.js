@@ -16,52 +16,13 @@
  *   node create-display-capture.js "My Monitor"   # Creates "My Monitor" display capture source
  */
 
-// Import the OBS WebSocket library
-import OBSWebSocket from 'obs-websocket-js';
-
-// Create a new instance of the OBS WebSocket client
-const obs = new OBSWebSocket();
-
-// Connection parameters - adjust these as needed
-const connectionParams = {
-  address: 'ws://localhost:4455', // Default OBS WebSocket address and port
-  password: 'OwuWIvIyVGFwcL01', // OBS WebSocket password (change if needed)
-};
-
-// Register event handlers
-obs.on('ConnectionOpened', () => {
-  console.log('Event: Connection to OBS WebSocket server opened');
-});
-
-obs.on('ConnectionClosed', () => {
-  console.log('Event: Connection to OBS WebSocket server closed');
-});
-
-obs.on('ConnectionError', (error) => {
-  console.error('Event: Connection error:', error);
-});
-
 // Function to create and configure a display capture source in OBS
-async function createDisplayCaptureSource() {
+async function createDisplayCaptureSource(obs) {
   // Get source name from command line arguments or use default
   const sourceName = process.argv[2] || '显示器采集'; // Default: "Display Capture" in Chinese
 
   try {
-    console.log('Connecting to OBS WebSocket...');
-
-    // Create a promise that rejects after a timeout
-    const connectPromise = obs.connect(connectionParams.address, connectionParams.password);
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Connection timeout after 10 seconds')), 10000);
-    });
-
-    // Race the connection against the timeout
-    await Promise.race([connectPromise, timeoutPromise]);
-    console.log('Connected to OBS WebSocket!');
-
-    // Get OBS version
-    const { obsVersion } = await obs.call('GetVersion');
-    console.log(`OBS Studio Version: ${obsVersion}`);
+    console.log('Creating new display capture...');
 
     // Get current scene
     const { currentProgramSceneName } = await obs.call('GetCurrentProgramScene');
@@ -167,4 +128,4 @@ async function createDisplayCaptureSource() {
 }
 
 // Run the display capture source creation function
-createDisplayCaptureSource();
+export default createDisplayCaptureSource;
