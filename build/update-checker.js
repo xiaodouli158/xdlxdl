@@ -22,11 +22,22 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Configuration
 const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60 * 6; // Check every 6 hours
-// Configuration for Cloudflare R2
-const R2_ACCOUNT_ID = '84794ee73142290fa69ac64ae8fc7bee';
+
+// Configuration for Cloudflare R2 (Primary Server)
+const R2_ACCOUNT_ID = '84794ee73142290fa69ac64ae8fc7beea';
 const R2_ACCESS_KEY_ID = '50ff0db943697b84c9386513d45fabb9';
 const R2_SECRET_ACCESS_KEY = '3a33b9b6f3d8bcc1a05aea230d447af20db97f3cbe3776f1aecfbd8c39ccf579';
 const R2_BUCKET_NAME = 'xiaodouliupdates';
+
+// Configuration for Backup Server
+const BACKUP_SERVER_BASE_URL = 'http://localhost:8000';
+const BACKUP_SERVER_ENDPOINTS = {
+  VERSION_CHECK: '/api/v1/software-versions/public/latest.yml',
+  DOWNLOAD: '/api/v1/software-versions/public/download'
+};
+
+// Server connection timeout (in milliseconds)
+const SERVER_TIMEOUT = 10000; // 10 seconds
 
 // Initialize S3 client for R2
 const s3Client = new S3Client({
@@ -64,6 +75,196 @@ function saveUpdateConfig() {
     fs.writeFileSync(updateConfigPath, JSON.stringify(config));
   } catch (error) {
     console.error('Error saving update config:', error);
+  }
+}
+
+// Test server connectivity
+async function testServerConnectivity(serverType = 'R2') {
+  try {
+    if (serverType === 'R2') {
+      // Test R2 connectivity by trying to list bucket contents
+      const command = new GetObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: 'latest.yml'
+      });
+
+      // Set a timeout for the request
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('R2 connection timeout')), SERVER_TIMEOUT);
+      });
+
+      const response = await Promise.race([
+        s3Client.send(command),
+        timeoutPromise
+      ]);
+
+      return { success: true, server: 'R2' };
+    } else if (serverType === 'BACKUP') {
+      // Test backup server connectivity
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Backup server connection timeout')), SERVER_TIMEOUT);
+      });
+
+      const response = await Promise.race([
+        fetch(`${BACKUP_SERVER_BASE_URL}${BACKUP_SERVER_ENDPOINTS.VERSION_CHECK}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }),
+        timeoutPromise
+      ]);
+
+      if (!response.ok) {
+        throw new Error(`Backup server responded with status: ${response.status}`);
+      }
+
+      return { success: true, server: 'BACKUP' };
+    }
+  } catch (error) {
+    console.error(`${serverType} server connectivity test failed:`, error.message);
+    return { success: false, server: serverType, error: error.message };
+  }
+}
+
+// Get version info from R2 server
+async function getVersionInfoFromR2() {
+  try {
+    console.log(`Checking for updates from R2 bucket: ${R2_BUCKET_NAME}`);
+
+    const command = new GetObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: 'latest.yml'
+    });
+
+    const response = await s3Client.send(command);
+    if (!response || !response.Body) {
+      throw new Error('Failed to fetch version info: No data returned');
+    }
+
+    const bodyContents = await response.Body.transformToString();
+    const versionInfo = JSON.parse(bodyContents);
+
+    // Add server source info
+    versionInfo.serverSource = 'R2';
+
+    return versionInfo;
+  } catch (error) {
+    console.error('Error fetching version info from R2:', error.message);
+    throw error;
+  }
+}
+
+// Parse YAML-like content to extract version information
+function parseLatestYml(yamlContent) {
+  const lines = yamlContent.split('\n');
+  const versionInfo = {};
+  let inFilesSection = false;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith('#') || !trimmedLine) continue;
+
+    // Check if we're entering the files section
+    if (trimmedLine === 'files:') {
+      inFilesSection = true;
+      continue;
+    }
+
+    // If we're in files section and encounter a non-indented line, we're out of files section
+    if (inFilesSection && !line.startsWith(' ') && !line.startsWith('\t')) {
+      inFilesSection = false;
+    }
+
+    if (trimmedLine.startsWith('version:')) {
+      versionInfo.version = trimmedLine.split(':')[1].trim();
+    } else if (trimmedLine.startsWith('path:')) {
+      versionInfo.fileName = trimmedLine.split(':')[1].trim();
+    } else if (trimmedLine.startsWith('sha512:') && !versionInfo.sha512) {
+      versionInfo.sha512 = trimmedLine.split(':')[1].trim();
+    } else if (trimmedLine.startsWith('releaseDate:')) {
+      versionInfo.releaseDate = trimmedLine.split(':')[1].trim().replace(/'/g, '');
+    } else if (inFilesSection && trimmedLine.startsWith('- url:')) {
+      versionInfo.fileName = trimmedLine.split('url:')[1].trim();
+    } else if (inFilesSection && trimmedLine.startsWith('url:')) {
+      versionInfo.fileName = trimmedLine.split(':')[1].trim();
+    } else if (trimmedLine.startsWith('size:')) {
+      versionInfo.size = parseInt(trimmedLine.split(':')[1].trim());
+    }
+  }
+
+  console.log('Parsed YAML version info:', versionInfo);
+  return versionInfo;
+}
+
+// Get version info from backup server
+async function getVersionInfoFromBackup() {
+  try {
+    console.log(`Checking for updates from backup server: ${BACKUP_SERVER_BASE_URL}`);
+
+    const response = await fetch(`${BACKUP_SERVER_BASE_URL}${BACKUP_SERVER_ENDPOINTS.VERSION_CHECK}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/plain, application/x-yaml, text/yaml'
+      },
+      timeout: SERVER_TIMEOUT
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backup server responded with status: ${response.status} ${response.statusText}`);
+    }
+
+    const yamlContent = await response.text();
+    console.log('Received YAML content from backup server:', yamlContent);
+
+    const versionInfo = parseLatestYml(yamlContent);
+    console.log('Parsed version info:', versionInfo);
+
+    // Add server source info
+    versionInfo.serverSource = 'BACKUP';
+
+    // Add product name if not present
+    if (!versionInfo.productName) {
+      versionInfo.productName = getProductName();
+    }
+
+    return versionInfo;
+  } catch (error) {
+    console.error('Error fetching version info from backup server:', error.message);
+    throw error;
+  }
+}
+
+// Get version info with fallback mechanism
+async function getVersionInfoWithFallback() {
+  console.log('Starting version check with fallback mechanism...');
+
+  // First, try R2 server
+  try {
+    const r2Test = await testServerConnectivity('R2');
+    if (r2Test.success) {
+      console.log('R2 server is accessible, fetching version info...');
+      return await getVersionInfoFromR2();
+    } else {
+      console.log('R2 server connectivity test failed, trying backup server...');
+    }
+  } catch (error) {
+    console.log('R2 server failed, trying backup server...', error.message);
+  }
+
+  // If R2 fails, try backup server
+  try {
+    const backupTest = await testServerConnectivity('BACKUP');
+    if (backupTest.success) {
+      console.log('Backup server is accessible, fetching version info...');
+      return await getVersionInfoFromBackup();
+    } else {
+      console.log('Backup server connectivity test failed');
+      throw new Error('Both R2 and backup servers are not accessible');
+    }
+  } catch (error) {
+    console.error('Both servers failed:', error.message);
+    throw new Error(`无法连接到更新服务器: R2和备用服务器都无法访问`);
   }
 }
 
@@ -442,6 +643,117 @@ function showProgressDialog(versionInfo) {
   return progressWindow;
 }
 
+// Download from R2 server
+async function downloadFromR2(fileName) {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: fileName
+    });
+
+    const downloadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    console.log(`Generated R2 download URL: ${downloadUrl}`);
+
+    const response = await fetch(downloadUrl);
+    if (!response.ok) {
+      throw new Error(`R2 download failed: ${response.status} ${response.statusText}`);
+    }
+
+    return { response, downloadUrl, serverSource: 'R2' };
+  } catch (error) {
+    console.error('Error downloading from R2:', error.message);
+    throw error;
+  }
+}
+
+// Download from backup server
+async function downloadFromBackup(fileName, versionInfo) {
+  try {
+    // Extract version from fileName if needed
+    let version = versionInfo?.version;
+    if (!version && fileName) {
+      // Try to extract version from filename like "xiaodouli-setup-1.3.5.exe"
+      const versionMatch = fileName.match(/(\d+\.\d+\.\d+)/);
+      if (versionMatch) {
+        version = versionMatch[1];
+      }
+    }
+
+    // Construct download URL using the specified format
+    const downloadUrl = `${BACKUP_SERVER_BASE_URL}${BACKUP_SERVER_ENDPOINTS.DOWNLOAD}/${fileName}`;
+    console.log(`Generated backup server download URL: ${downloadUrl}`);
+    console.log(`Using version: ${version} for file: ${fileName}`);
+
+    const response = await fetch(downloadUrl, {
+      method: 'GET',
+      timeout: SERVER_TIMEOUT
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backup server download failed: ${response.status} ${response.statusText}`);
+    }
+
+    return { response, downloadUrl, serverSource: 'BACKUP' };
+  } catch (error) {
+    console.error('Error downloading from backup server:', error.message);
+    throw error;
+  }
+}
+
+// Download with fallback mechanism
+async function downloadWithFallback(fileName, versionInfo) {
+  console.log(`Starting download with fallback mechanism for: ${fileName}`);
+
+  // First, try the same server that provided version info
+  if (versionInfo.serverSource === 'R2') {
+    try {
+      console.log('Trying R2 server for download (same as version source)...');
+      return await downloadFromR2(fileName);
+    } catch (error) {
+      console.log('R2 download failed, trying backup server...', error.message);
+    }
+
+    // If R2 fails, try backup server
+    try {
+      console.log('Trying backup server for download...');
+      return await downloadFromBackup(fileName, versionInfo);
+    } catch (error) {
+      console.error('Both download servers failed:', error.message);
+      throw new Error('无法从任何服务器下载更新文件');
+    }
+  } else if (versionInfo.serverSource === 'BACKUP') {
+    try {
+      console.log('Trying backup server for download (same as version source)...');
+      return await downloadFromBackup(fileName, versionInfo);
+    } catch (error) {
+      console.log('Backup server download failed, trying R2 server...', error.message);
+    }
+
+    // If backup fails, try R2 server
+    try {
+      console.log('Trying R2 server for download...');
+      return await downloadFromR2(fileName);
+    } catch (error) {
+      console.error('Both download servers failed:', error.message);
+      throw new Error('无法从任何服务器下载更新文件');
+    }
+  } else {
+    // Default fallback order: R2 first, then backup
+    try {
+      console.log('Trying R2 server for download (default)...');
+      return await downloadFromR2(fileName);
+    } catch (error) {
+      console.log('R2 download failed, trying backup server...', error.message);
+      try {
+        return await downloadFromBackup(fileName, versionInfo);
+      } catch (backupError) {
+        console.error('Both download servers failed:', error.message, backupError.message);
+        throw new Error('无法从任何服务器下载更新文件');
+      }
+    }
+  }
+}
+
 // Download the update file
 async function downloadUpdate(versionInfo) {
   const fileName = versionInfo.fileName;
@@ -449,44 +761,42 @@ async function downloadUpdate(versionInfo) {
 
   console.log(`Preparing to download update: ${fileName}`);
   console.log(`Saving to: ${filePath}`);
+  console.log(`Version info source: ${versionInfo.serverSource || 'Unknown'}`);
 
   // Create progress window
   const progressWindow = showProgressDialog(versionInfo);
 
-  // 生成预签名下载URL（在外部定义，以便在事件处理程序中使用）
-  let downloadUrl;
+  // Download with fallback mechanism
+  let downloadResult;
   try {
-    const command = new GetObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: fileName
+    downloadResult = await downloadWithFallback(fileName, versionInfo);
+  } catch (error) {
+    console.error('Download with fallback failed:', error.message);
+    throw error;
+  }
+
+  const { response, downloadUrl, serverSource } = downloadResult;
+  console.log(`Successfully connected to ${serverSource} server for download`);
+
+  // 添加手动下载按钮事件监听
+  progressWindow.webContents.executeJavaScript(`
+    document.addEventListener('manual-download-requested', function() {
+      console.log('手动下载请求');
+      require('electron').shell.openExternal('${downloadUrl}');
     });
+  `);
 
-    downloadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+  // 添加访问官网按钮事件监听
+  progressWindow.webContents.executeJavaScript(`
+    document.addEventListener('visit-website-requested', function() {
+      console.log('访问官网请求');
+      require('electron').shell.openExternal('https://www.xdlwebcast.com');
+    });
+  `);
 
-    // 添加手动下载按钮事件监听
-    progressWindow.webContents.executeJavaScript(`
-      document.addEventListener('manual-download-requested', function() {
-        console.log('手动下载请求');
-        require('electron').shell.openExternal('${downloadUrl}');
-      });
-    `);
+  console.log(`Using download URL from ${serverSource}: ${downloadUrl}`);
 
-    // 添加访问官网按钮事件监听
-    progressWindow.webContents.executeJavaScript(`
-      document.addEventListener('visit-website-requested', function() {
-        console.log('访问官网请求');
-        require('electron').shell.openExternal('https://www.xdlwebcast.com');
-      });
-    `);
-
-    console.log(`Generated download URL: ${downloadUrl}`);
-
-    // Start the download
-    const response = await fetch(downloadUrl);
-
-    if (!response.ok) {
-      throw new Error(`Failed to download update: ${response.status} ${response.statusText}`);
-    }
+  try {
 
     // Get the total size for progress calculation
     const totalSize = parseInt(response.headers.get('content-length') || '0', 10);
@@ -889,25 +1199,9 @@ export async function checkForUpdates(force = false) {
   }
 
   try {
-    // Fetch latest version info using S3 client
-    console.log(`Checking for updates from R2 bucket: ${R2_BUCKET_NAME}`);
-
-    // Get the latest.yml object from the bucket
-    const command = new GetObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: 'latest.yml'
-    });
-
-    const response = await s3Client.send(command);
-    if (!response || !response.Body) {
-      throw new Error('Failed to fetch version info: No data returned');
-    }
-
-    // Convert the readable stream to a string
-    const bodyContents = await response.Body.transformToString();
-
-    // Parse the JSON content
-    const versionInfo = JSON.parse(bodyContents);
+    // Use the new fallback mechanism to get version info
+    console.log('Using fallback mechanism to check for updates...');
+    const versionInfo = await getVersionInfoWithFallback();
 
     // 获取软件的实际版本和产品名称
     let currentVersion = '2.0.0'; // Default version
@@ -1027,26 +1321,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       }
 
       console.log(`Current version: ${currentVersion}`);
-      console.log('Checking for updates...');
+      console.log('Checking for updates with fallback mechanism...');
 
-      // Create S3 client command
-      const command = new GetObjectCommand({
-        Bucket: R2_BUCKET_NAME,
-        Key: 'latest.yml'
-      });
-
-      // Get latest version info
-      const response = await s3Client.send(command);
-      if (!response || !response.Body) {
-        throw new Error('Failed to fetch version info: No data returned');
-      }
-
-      // Convert the readable stream to a string
-      const bodyContents = await response.Body.transformToString();
-
-      // Parse the JSON content
-      const versionInfo = JSON.parse(bodyContents);
-      console.log(`Latest version: ${versionInfo.version}`);
+      // Use the fallback mechanism to get version info
+      const versionInfo = await getVersionInfoWithFallback();
+      console.log(`Latest version: ${versionInfo.version} (from ${versionInfo.serverSource})`);
 
       // Compare versions
       if (isNewerVersion(currentVersion, versionInfo.version)) {

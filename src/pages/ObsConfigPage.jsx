@@ -26,6 +26,10 @@ function ObsConfigPage() {
     resolution: '获取中...'
   });
 
+  // 备份还原弹窗状态
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [selectedBackupFile, setSelectedBackupFile] = useState('');
+
   // 初始化选择第一个设备
   useEffect(() => {
     // 重置所有选择框
@@ -758,19 +762,7 @@ function ObsConfigPage() {
                 备份您的OBS配置文件，或从之前的备份中还原设置。
               </p>
 
-              {/* 备份文件选择框 */}
-              <div className="mb-4">
-                <select
-                  className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  defaultValue=""
-                >
-                  <option value="" disabled>请选择备份文件</option>
-                  <option value="backup_20230601">备份 2023-06-01 (10:30)</option>
-                  <option value="backup_20230530">备份 2023-05-30 (15:45)</option>
-                  <option value="backup_20230525">备份 2023-05-25 (09:15)</option>
-                  <option value="backup_20230520">备份 2023-05-20 (14:20)</option>
-                </select>
-              </div>
+
 
               {/* 云备份和云还原按钮 */}
               <div className="grid grid-cols-2 gap-3">
@@ -789,8 +781,8 @@ function ObsConfigPage() {
                 <button
                   className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors flex items-center justify-center text-sm"
                   onClick={() => {
-                    // OBS云还原逻辑
-                    alert('开始OBS云还原...');
+                    // 显示备份还原弹窗
+                    setShowBackupModal(true);
                   }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -803,6 +795,62 @@ function ObsConfigPage() {
           </div>
         </div>
       </div>
+
+      {/* 备份还原弹窗 */}
+      {showBackupModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 w-full max-w-md border border-slate-700 shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-blue-300">选择备份文件</h2>
+              <button
+                onClick={() => setShowBackupModal(false)}
+                className="text-gray-400 hover:text-white rounded-full p-1 hover:bg-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">备份文件列表:</label>
+              <select
+                className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={selectedBackupFile}
+                onChange={(e) => setSelectedBackupFile(e.target.value)}
+              >
+                <option value="">请选择备份文件</option>
+                <option value="backup_20230601">备份 2023-06-01 (10:30)</option>
+                <option value="backup_20230530">备份 2023-05-30 (15:45)</option>
+                <option value="backup_20230525">备份 2023-05-25 (09:15)</option>
+                <option value="backup_20230520">备份 2023-05-20 (14:20)</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-2.5 bg-gray-600 hover:bg-gray-700 rounded-lg text-white font-medium transition-colors"
+                onClick={() => setShowBackupModal(false)}
+              >
+                取消
+              </button>
+              <button
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                disabled={!selectedBackupFile}
+                onClick={() => {
+                  if (selectedBackupFile) {
+                    alert(`开始还原备份文件: ${selectedBackupFile}`);
+                    setShowBackupModal(false);
+                    setSelectedBackupFile('');
+                  }
+                }}
+              >
+                确认还原
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

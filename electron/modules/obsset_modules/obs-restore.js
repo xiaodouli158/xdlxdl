@@ -48,6 +48,7 @@ const obsStudioPath = path.join(appDataPath, 'obs-studio');
 const profilesPath = path.join(obsStudioPath, 'basic', 'profiles');
 const scenesPath = path.join(obsStudioPath, 'basic', 'scenes');
 const globalIniPath = path.join(obsStudioPath, 'global.ini');
+const userIniPath = path.join(obsStudioPath, 'user.ini');
 
 /**
  * Read connection parameters from config file
@@ -154,7 +155,7 @@ async function copyFilesToOBS(backupDir) {
           // Copy to OBS media directory or other appropriate location
           // This is a simplified approach - in a real implementation, you might want
           // to restore files to their original paths if that information is available
-          const destPath = path.join(obsStudioPath, file);
+          const destPath = path.join(obsStudioPath,'obs_media', file);
           await fs.copy(sourcePath, destPath);
           logger.info(`Copied media file to: ${destPath}`);
         }
@@ -189,7 +190,7 @@ async function updateSceneFilePaths(sceneData, backupDir, destScenePath) {
 
           // If the file exists in the backup, update the path
           if (fs.existsSync(backupFilePath)) {
-            const destFilePath = path.join(obsStudioPath, fileName);
+            const destFilePath = path.join(obsStudioPath, 'obs_media',fileName);
             obj[key] = destFilePath;
           }
         } else if (typeof value === 'object') {
@@ -207,40 +208,87 @@ async function updateSceneFilePaths(sceneData, backupDir, destScenePath) {
 }
 
 /**
- * Update OBS global.ini to use the restored profile and scene collection
+ * Update a specific INI file with profile and scene collection settings
+ * Using Python configparser-like approach for maximum reliability
+ * @param {string} iniPath - Path to the INI file
+ * @param {string} iniName - Name of the INI file (for logging)
  * @param {string} profileName - Name of the profile
  * @param {string} sceneCollectionName - Name of the scene collection
  */
-async function updateGlobalIni(profileName, sceneCollectionName) {
+async function updateIniFile(iniPath, iniName, profileName, sceneCollectionName) {
   try {
-    let config = {};
+    // Check if INI file exists (similar to Python's os.path.exists)
+    if (await fs.pathExists(iniPath)) {
+      // Create backup before modifying
+      const backupPath = `${iniPath}.backup.${Date.now()}`;
+      await fs.copy(iniPath, backupPath);
+      logger.info(`Created backup: ${backupPath}`);
 
-    // Check if global.ini exists
-    if (await fs.pathExists(globalIniPath)) {
-      // Read global.ini
-      const iniContent = await fs.readFile(globalIniPath, 'utf8');
-      config = ini.parse(iniContent);
+      try {
+        // Read and parse INI file using robust method (similar to Python's configparser.read)
+        const config = await readIniFileRobust(iniPath);
+
+        // Set configuration values (similar to Python's config.set)
+        setIniValue(config, 'Basic', 'Profile', profileName);
+        setIniValue(config, 'Basic', 'ProfileDir', profileName);
+        setIniValue(config, 'Basic', 'SceneCollection', sceneCollectionName);
+        setIniValue(config, 'Basic', 'SceneCollectionFile', sceneCollectionName);
+
+        // Write INI file with proper formatting (similar to Python's config.write)
+        await writeIniFileRobust(iniPath, config);
+        logger.info(`Updated ${iniName} with profile: ${profileName}, scene collection: ${sceneCollectionName}`);
+
+        // Remove backup if successful
+        await fs.remove(backupPath);
+        logger.info(`Removed backup after successful update`);
+
+      } catch (updateError) {
+        // Restore from backup if update failed
+        logger.error(`Update failed, restoring from backup: ${updateError.message}`);
+        await fs.copy(backupPath, iniPath);
+        await fs.remove(backupPath);
+        throw updateError;
+      }
     } else {
-      logger.warn(`global.ini not found at: ${globalIniPath}, will create a new one`);
+      logger.warn(`${iniName} not found at: ${iniPath}, will create a new one`);
       // Ensure the directory exists
-      await fs.ensureDir(path.dirname(globalIniPath));
+      await fs.ensureDir(path.dirname(iniPath));
+
+      // Create a new config object and write it
+      const config = {
+        Basic: {
+          Profile: profileName,
+          ProfileDir: profileName,
+          SceneCollection: sceneCollectionName,
+          SceneCollectionFile: sceneCollectionName
+        }
+      };
+
+      await writeIniFileRobust(iniPath, config);
+      logger.info(`Created new ${iniName} with profile: ${profileName}, scene collection: ${sceneCollectionName}`);
     }
-
-    // Update profile and scene collection
-    if (!config.Basic) {
-      config.Basic = {};
-    }
-
-    config.Basic.Profile = profileName;
-    config.Basic.ProfileDir = profileName;
-    config.Basic.SceneCollection = sceneCollectionName;
-    config.Basic.SceneCollectionFile = sceneCollectionName;
-
-    // Write updated global.ini
-    await fs.writeFile(globalIniPath, ini.stringify(config), { encoding: 'utf8' });
-    logger.info(`Updated global.ini with profile: ${profileName}, scene collection: ${sceneCollectionName}`);
   } catch (error) {
-    logger.error(`Error updating global.ini: ${error.message}`);
+    logger.error(`Error updating ${iniName}: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Update both global.ini and user.ini with the restored profile and scene collection
+ * @param {string} profileName - Name of the profile
+ * @param {string} sceneCollectionName - Name of the scene collection
+ */
+async function updateConfigurationFiles(profileName, sceneCollectionName) {
+  try {
+    // Update global.ini
+    await updateIniFile(globalIniPath, 'global.ini', profileName, sceneCollectionName);
+
+    // Update user.ini
+    await updateIniFile(userIniPath, 'user.ini', profileName, sceneCollectionName);
+
+    logger.info(`Successfully updated both global.ini and user.ini configuration files`);
+  } catch (error) {
+    logger.error(`Error updating configuration files: ${error.message}`);
     throw error;
   }
 }
@@ -290,7 +338,7 @@ async function restoreOBSConfiguration(zipFilePath) {
       const { profileName, sceneCollectionName } = await copyFilesToOBS(tempDir);
 
       // Update global.ini
-      await updateGlobalIni(profileName, sceneCollectionName);
+      await updateConfigurationFiles(profileName, sceneCollectionName);
 
       logger.info('Restore completed successfully');
       console.log('\nOBS configuration restore completed successfully!');

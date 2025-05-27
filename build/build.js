@@ -20,7 +20,7 @@ const config = {
     target: ['nsis'],
     signAndEditExecutable: false,
     requestedExecutionLevel: 'requireAdministrator',
-    icon: 'build/xdllogo.ico'
+    icon: 'public/xdllogo.ico'
   },
   nsis: {
     oneClick: false,
@@ -31,8 +31,8 @@ const config = {
     shortcutName: '小斗笠直播助手',
     include: 'build/installer.nsh',
     artifactName: '小斗笠直播助手-Setup-${version}.${ext}',
-    installerIcon: 'build/xdllogo.ico',
-    uninstallerIcon: 'build/xdllogo.ico'
+    installerIcon: 'public/xdllogo.ico',
+    uninstallerIcon: 'public/xdllogo.ico'
   }
 };
 

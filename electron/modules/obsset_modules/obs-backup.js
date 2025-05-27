@@ -5,14 +5,21 @@
  * and creates a backup of the OBS configuration files.
  */
 
-// Use CommonJS require instead of ES modules for better compatibility
-const OBSWebSocket = require('obs-websocket-js').default;
-const fs = require('fs-extra');
-const path = require('path');
-const { createWriteStream } = require('fs');
-const { createZipArchive } = require('./utils/zip-utils.js');
-const winston = require('winston');
-const os = require('os');
+// Use ES modules for better compatibility with the project
+import OBSWebSocket from 'obs-websocket-js';
+import fs from 'fs-extra';
+import path from 'path';
+import { createWriteStream } from 'fs';
+import { createZipArchive } from './utils/zip-utils.js';
+import winston from 'winston';
+import os from 'os';
+import fetch from 'node-fetch';
+import FormData from 'form-data';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configure logger
 const logger = winston.createLogger({
@@ -28,8 +35,6 @@ const logger = winston.createLogger({
     new winston.transports.File({ filename: 'obs-backup.log' })
   ]
 });
-
-// __dirname is already available in CommonJS
 
 // Connection parameters
 const connectionParams = {
@@ -175,6 +180,73 @@ async function copyMediaFiles(data, backupFolderPath) {
 }
 
 /**
+ * Upload backup file to cloud server
+ * @param {string} filePath - Path to the backup file
+ * @returns {Promise<boolean>} Upload success status
+ */
+async function uploadBackupFile(filePath) {
+  try {
+    logger.info(`Starting upload of backup file: ${filePath}`);
+
+    // Check if file exists
+    if (!await fs.pathExists(filePath)) {
+      logger.error(`Backup file not found: ${filePath}`);
+      return false;
+    }
+
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(filePath));
+    formData.append('description', 'OBS Configuration Backup');
+    formData.append('is_public', 'false');
+    formData.append('upload_to_cloud', 'true');
+
+    // Upload to server
+    const response = await fetch('http://localhost:8000/api/v1/files/upload', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...formData.getHeaders(),
+        'accept': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      logger.info('Backup file uploaded successfully to cloud');
+      console.log('\nBackup file uploaded successfully to cloud!');
+
+      try {
+        const responseData = await response.json();
+        if (responseData && responseData.file_id) {
+          logger.info(`File ID: ${responseData.file_id}`);
+          console.log(`File ID: ${responseData.file_id}`);
+        }
+      } catch (jsonError) {
+        logger.warn('Could not parse response JSON, but upload was successful');
+      }
+
+      return true;
+    } else {
+      logger.error(`Upload failed with status: ${response.status}`);
+      console.log(`\nUpload failed with status: ${response.status}`);
+      return false;
+    }
+  } catch (error) {
+    logger.error(`Upload failed: ${error.message}`);
+    console.error(`\nUpload failed: ${error.message}`);
+
+    if (error.code === 'ECONNREFUSED') {
+      console.log('\nTroubleshooting tips:');
+      console.log('1. Make sure the upload server is running at http://localhost:8000');
+      console.log('2. Check your network connection');
+      console.log('3. Verify the API endpoint is correct');
+    }
+
+    return false;
+  }
+}
+
+/**
  * Main function to backup OBS configuration
  */
 async function backupOBSConfiguration() {
@@ -221,6 +293,20 @@ async function backupOBSConfiguration() {
       logger.info(`Backup completed successfully: ${zipFilePath}`);
       console.log(`\nOBS configuration backup completed successfully!`);
       console.log(`Backup saved to: ${zipFilePath}`);
+
+      // Upload backup file to cloud
+      console.log('\nUploading backup to cloud...');
+      const uploadSuccess = await uploadBackupFile(zipFilePath);
+
+      if (uploadSuccess) {
+        logger.info('Backup process completed with cloud upload');
+        console.log('\nBackup process completed successfully with cloud upload!');
+      } else {
+        logger.warn('Backup completed but cloud upload failed');
+        console.log('\nBackup completed successfully but cloud upload failed.');
+        console.log('The backup file is still available locally.');
+      }
+
       return true;
     } else {
       logger.error('Backup failed: Could not copy configuration files');
@@ -252,8 +338,8 @@ async function backupOBSConfiguration() {
 }
 
 // Run the backup function if this file is executed directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   backupOBSConfiguration();
 }
 
-module.exports = backupOBSConfiguration;
+export default backupOBSConfiguration;
