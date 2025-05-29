@@ -59,6 +59,9 @@ contextBridge.exposeInMainWorld('electron', {
   // 系统硬件信息
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
 
+  // 外部链接
+  openExternal: (url) => ipcRenderer.invoke('open-external', { url }),
+
   // 事件监听
   onAuthNotification: (callback) => {
     ipcRenderer.on('auth-notification', (event, data) => callback(data));

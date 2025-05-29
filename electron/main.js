@@ -792,6 +792,19 @@ app.whenReady().then(async () => {
     }
   });
 
+  // 打开外部链接
+  ipcMain.handle('open-external', async (_, { url }) => {
+    try {
+      console.log('Opening external URL:', url);
+      const { shell } = require('electron');
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to open external URL:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 在macOS上，点击dock图标时重新创建窗口
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

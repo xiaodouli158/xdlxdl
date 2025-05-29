@@ -1,16 +1,79 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import WorkCard from '../components/WorkCard';
+import apiService from '../services/apiService';
 
 function PluginsPage() {
-  // 模拟插件数据
-  const plugins = [
-    { id: 1, name: 'OBS Studio', description: '开源的视频录制和直播软件', version: '30.0.2' },
-    { id: 2, name: '变声器', description: '实时语音变声效果', version: '2.1.0' },
-    { id: 3, name: '场景切换器', description: '快速切换直播场景', version: '1.5.3' },
-    { id: 4, name: '特效滤镜', description: '添加视频特效和滤镜', version: '3.2.1' },
-    { id: 5, name: '弹幕助手', description: '弹幕管理和互动工具', version: '2.0.5' },
-    { id: 6, name: '直播计时器', description: '显示直播时长和提醒', version: '1.1.0' },
-  ];
+  // 状态管理
+  const [plugins, setPlugins] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // 获取插件数据
+  const fetchPlugins = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('开始获取插件数据...');
+
+      // 获取所有媒体数据
+      const allMediaData = await apiService.getAllMediaManifest();
+      console.log('获取到的所有媒体数据:', allMediaData);
+
+      // 获取插件类型的数据
+      const pluginData = apiService.getMediaByType(allMediaData, 'plugin');
+      console.log('获取到的插件数据:', pluginData);
+
+      // 为抖音视频添加videoId字段
+      const pluginsWithVideoId = pluginData.map(item =>
+        apiService.addVideoId(item)
+      );
+
+      console.log('处理后的插件数据:', pluginsWithVideoId);
+      setPlugins(pluginsWithVideoId);
+
+    } catch (err) {
+      console.error('获取插件数据失败:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 组件挂载时获取数据
+  useEffect(() => {
+    fetchPlugins();
+  }, []);
+
+  // 处理插件点击事件
+  const handlePluginClick = (plugin) => {
+    console.log('查看插件详情:', plugin.title);
+
+    // 如果有URL，则打开链接
+    if (plugin.url) {
+      if (window.electron) {
+        window.electron.openExternal(plugin.url);
+      } else {
+        window.open(plugin.url, '_blank');
+      }
+    }
+  };
+
+  // 处理下载/次要操作
+  const handleSecondaryAction = (plugin) => {
+    console.log('下载插件:', plugin.title);
+
+    // 优先使用downloadUrl，否则使用url
+    const downloadUrl = plugin.downloadUrl || plugin.url;
+    if (downloadUrl) {
+      if (window.electron) {
+        window.electron.openExternal(downloadUrl);
+      } else {
+        window.open(downloadUrl, '_blank');
+      }
+    }
+  };
 
   return (
     <div className="min-h-full bg-gray-900 text-white p-2 flex flex-col h-full gap-2">
@@ -18,29 +81,86 @@ function PluginsPage() {
         <h1 className="text-xl font-bold text-indigo-400">插件中心</h1>
         <Link to="/app" className="text-indigo-400 hover:text-indigo-300 text-sm">返回首页</Link>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {plugins.map(plugin => (
-          <div 
-            key={plugin.id} 
-            className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-lg border border-indigo-900/30 shadow-lg hover:border-indigo-700/50 transition-colors"
-          >
-            <h2 className="text-lg font-semibold mb-1 text-indigo-300">{plugin.name}</h2>
-            <div className="text-xs text-indigo-400 mb-3">v{plugin.version}</div>
-            <p className="text-sm text-gray-300 mb-4">{plugin.description}</p>
-            <div className="flex justify-between">
-              <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm transition-colors">
-                下载
-              </button>
-              <button className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-sm transition-colors">
-                查看详情
+
+      {/* 加载状态 */}
+      {loading && (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+          <span className="ml-3 text-gray-400">正在加载插件数据...</span>
+        </div>
+      )}
+
+      {/* 错误状态 */}
+      {error && (
+        <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 mb-4">
+          <div className="flex items-center">
+            <div className="text-red-400 mr-3">⚠️</div>
+            <div>
+              <h3 className="text-red-400 font-semibold">加载失败</h3>
+              <p className="text-red-300 text-sm mt-1">{error}</p>
+              <button
+                onClick={fetchPlugins}
+                className="mt-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
+              >
+                重试
               </button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* 插件列表 */}
+      {!loading && !error && (
+        <>
+          {plugins.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">
+              <div className="text-4xl mb-4">🔌</div>
+              <p>暂无插件数据</p>
+              <button
+                onClick={fetchPlugins}
+                className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors"
+              >
+                刷新数据
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {plugins.map(plugin => (
+                <WorkCard
+                  key={plugin.id}
+                  id={plugin.id}
+                  title={plugin.title}
+                  description={plugin.description}
+                  type={plugin.type}
+                  url={plugin.url}
+                  platform={plugin.platform}
+                  playType={plugin.playType}
+                  viewCount={plugin.viewCount}
+                  isHot={plugin.isHot}
+                  coverurl={plugin.coverurl}
+                  thumbnail={plugin.thumbnail}
+                  duration={plugin.duration}
+                  level={plugin.level}
+                  deviceModel={plugin.deviceModel}
+                  downloadUrl={plugin.downloadUrl}
+                  clickUrl={plugin.clickUrl}
+                  version={plugin.version}
+                  rating={plugin.rating}
+                  videoId={plugin.videoId}
+                  size="small"
+                  variant="compact"
+                  onClick={() => handlePluginClick(plugin)}
+                  onSecondaryAction={() => handleSecondaryAction(plugin)}
+                  secondaryActionText="下载"
+                  showActions={true}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
 
-export default PluginsPage; 
+export default PluginsPage;

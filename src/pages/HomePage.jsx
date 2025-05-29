@@ -3,9 +3,11 @@ import { User, Check, AlertCircle, Link, Key, Copy } from 'lucide-react';
 import LoginModal from '../components/LoginModal';
 import AuthNotification from '../components/AuthNotification';
 import StatusPrompt from '../components/StatusPrompt';
+import WorkCard from '../components/WorkCard';
 import { useNavigate } from 'react-router-dom';
 import { loginWithDouyinWeb, loginWithDouyinCompanion } from '../utils/douyinLoginUtils';
 import { loadPlatformUserData, clearPlatformUserData } from '../utils/platformLoginUtils';
+import apiService from '../services/apiService';
 // import { useStreaming } from '../context/StreamingContext';
 // import { workspaceStreamInfo, configureAndStartOBS } from '../utils/obsUtils';
 
@@ -133,6 +135,9 @@ const HomePage = () => {
 
     // 执行异步函数
     fetchVersions();
+
+    // 获取热门推荐数据
+    fetchHotRecommendations();
   }, []); // 空依赖数组确保只在组件挂载时执行一次
 
   // 处理用户选择变更并保存到本地存储
@@ -1005,8 +1010,46 @@ const HomePage = () => {
     deviceSize: '11寸'
   });
 
-  // 示例视频文件
-  const videoFiles = ['视频1.mp4', '视频2.mp4', '视频3.mp4', '视频4.mp4', '视频5.mp4', '视频6.mp4', '视频7.mp4'];
+  // 热门推荐数据状态
+  const [recommendedWorks, setRecommendedWorks] = useState([]);
+  const [hotDataLoading, setHotDataLoading] = useState(true);
+  const [hotDataError, setHotDataError] = useState(null);
+
+  // 获取热门推荐数据
+  const fetchHotRecommendations = async () => {
+    try {
+      setHotDataLoading(true);
+      setHotDataError(null);
+
+      console.log('开始获取热门推荐数据...');
+
+      // 获取热门媒体数据
+      const hotMediaData = await apiService.getHotMediaManifest();
+      console.log('获取到的热门媒体数据:', hotMediaData);
+
+      // 将所有类型的热门数据合并到一个数组中
+      const allHotItems = [];
+
+      // 遍历所有类型，收集热门数据
+      Object.keys(hotMediaData).forEach(type => {
+        if (Array.isArray(hotMediaData[type])) {
+          const itemsWithVideoId = hotMediaData[type].map(item =>
+            apiService.addVideoId(item)
+          );
+          allHotItems.push(...itemsWithVideoId);
+        }
+      });
+
+      console.log('合并后的热门数据:', allHotItems);
+      setRecommendedWorks(allHotItems);
+
+    } catch (err) {
+      console.error('获取热门推荐数据失败:', err);
+      setHotDataError(err.message);
+    } finally {
+      setHotDataLoading(false);
+    }
+  };
 
 
   // 处理登录/退出按钮点击
@@ -1364,21 +1407,97 @@ const HomePage = () => {
             </button>
           </nav>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 gap-3">
-          {videoFiles.slice(0, 7).map((file, index) => (
-            <div
-              key={index}
-              className="bg-slate-700/50 rounded-lg overflow-hidden cursor-pointer hover:bg-slate-700 transition-colors border border-slate-600/40"
-            >
-              <div className="aspect-video bg-slate-800 flex items-center justify-center">
-                <span className="text-xs text-slate-400">{file}</span>
-              </div>
-              <div className="p-2">
-                <p className="text-xs truncate text-slate-300">{file}</p>
+        {/* 加载状态 */}
+        {hotDataLoading && (
+          <div className="flex justify-center items-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+            <span className="ml-3 text-gray-400">正在加载热门推荐...</span>
+          </div>
+        )}
+
+        {/* 错误状态 */}
+        {hotDataError && (
+          <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 mb-4">
+            <div className="flex items-center">
+              <div className="text-red-400 mr-3">⚠️</div>
+              <div>
+                <h3 className="text-red-400 font-semibold">加载失败</h3>
+                <p className="text-red-300 text-sm mt-1">{hotDataError}</p>
+                <button
+                  onClick={fetchHotRecommendations}
+                  className="mt-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                >
+                  重试
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* 热门推荐列表 */}
+        {!hotDataLoading && !hotDataError && (
+          <>
+            {recommendedWorks.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                <div className="text-3xl mb-2">🔥</div>
+                <p>暂无热门推荐</p>
+                <button
+                  onClick={fetchHotRecommendations}
+                  className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors"
+                >
+                  刷新数据
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 gap-3">
+                {recommendedWorks.slice(0, 7).map((work) => (
+                  <WorkCard
+                    key={work.id}
+                    id={work.id}
+                    title={work.title}
+                    description={work.description}
+                    type={work.type}
+                    url={work.url}
+                    platform={work.platform}
+                    playType={work.playType}
+                    viewCount={work.viewCount}
+                    isHot={work.isHot}
+                    coverurl={work.coverurl}
+                    thumbnail={work.thumbnail}
+                    duration={work.duration}
+                    level={work.level}
+                    deviceModel={work.deviceModel}
+                    downloadUrl={work.downloadUrl}
+                    clickUrl={work.clickUrl}
+                    version={work.version}
+                    rating={work.rating}
+                    videoId={work.videoId}
+                    size="small"
+                    variant="compact"
+                    onClick={() => {
+                      // 根据数据中的字段判断类型并导航
+                      if (work.downloadUrl || work.version) {
+                        navigate('/app/plugins');
+                      } else if (work.deviceModel) {
+                        navigate('/app/devices');
+                      } else if (work.level || work.duration) {
+                        navigate('/app/tutorials');
+                      } else {
+                        // 默认根据平台或其他信息导航
+                        navigate('/app/more');
+                      }
+                    }}
+                    onSecondaryAction={() => {
+                      console.log('查看详情:', work.title);
+                    }}
+                    secondaryActionText="详情"
+                    showActions={false} // 在首页不显示操作按钮，保持简洁
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* OBS Settings Modal - 只有在需要时才显示 */}

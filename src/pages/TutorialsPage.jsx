@@ -1,85 +1,73 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Play } from 'lucide-react';
+import { X } from 'lucide-react';
+import WorkCard from '../components/WorkCard';
+import apiService from '../services/apiService';
 
 function TutorialsPage() {
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [currentVideoId, setCurrentVideoId] = useState('');
 
-  // 教程数据 - 包含抖音视频ID和封面图片
-  const tutorials = [
-    {
-      id: 1,
-      title: 'OBS直播设置入门指南',
-      duration: '15:30',
-      views: '8.9万',
-      coverImage: 'https://p3-pc.douyinpic.com/img/tos-cn-p-0000/o0AQBgAIEfABDgAeEgAhEfABDgAeEgAhEfABDgAeEgAh~c5_300x400.jpeg',
-      author: '直播大师',
-      date: '2023-12-05',
-      videoId: '7475781431025798411',
-      description: '从零开始学习OBS直播软件的基础设置，包括场景配置、音频设置、推流参数等核心功能。'
-    },
-    {
-      id: 2,
-      title: '如何提高直播画面质量',
-      duration: '22:45',
-      views: '5.3万',
-      coverImage: 'https://p3-pc.douyinpic.com/img/tos-cn-p-0000/o0AQBgAIEfABDgAeEgAhEfABDgAeEgAhEfABDgAeEgAh~c5_300x400.jpeg',
-      author: '画质专家',
-      date: '2024-01-15',
-      videoId: '7475781431025798411',
-      description: '详细讲解直播画面优化技巧，包括分辨率设置、码率调整、滤镜使用等专业方法。'
-    },
-    {
-      id: 3,
-      title: '直播互动技巧与话术',
-      duration: '18:20',
-      views: '12.1万',
-      coverImage: 'https://p3-pc.douyinpic.com/img/tos-cn-p-0000/o0AQBgAIEfABDgAeEgAhEfABDgAeEgAhEfABDgAeEgAh~c5_300x400.jpeg',
-      author: '主播学院',
-      date: '2024-02-08',
-      videoId: '7234567890123456791',
-      description: '学习如何与观众有效互动，掌握直播话术技巧，提升直播间活跃度和粉丝粘性。'
-    },
-    {
-      id: 4,
-      title: '用OBS制作高级转场效果',
-      duration: '29:15',
-      views: '6.7万',
-      coverImage: 'https://p3-pc.douyinpic.com/img/tos-cn-p-0000/o0AQBgAIEfABDgAeEgAhEfABDgAeEgAhEfABDgAeEgAh~c5_300x400.jpeg',
-      author: '特效大师',
-      date: '2024-02-22',
-      videoId: '7234567890123456792',
-      description: '深入学习OBS高级功能，制作专业的场景转场效果，让你的直播更具视觉冲击力。'
-    },
-    {
-      id: 5,
-      title: '直播设备选购指南',
-      duration: '35:10',
-      views: '9.4万',
-      coverImage: 'https://p3-pc.douyinpic.com/img/tos-cn-p-0000/o0AQBgAIEfABDgAeEgAhEfABDgAeEgAhEfABDgAeEgAh~c5_300x400.jpeg',
-      author: '设备评测师',
-      date: '2024-03-01',
-      videoId: '7234567890123456793',
-      description: '全面解析直播设备选购要点，包括摄像头、麦克风、灯光等设备的选择和搭配建议。'
-    },
-    {
-      id: 6,
-      title: '如何优化直播声音效果',
-      duration: '20:05',
-      views: '4.8万',
-      coverImage: 'https://p3-pc.douyinpic.com/img/tos-cn-p-0000/o0AQBgAIEfABDgAeEgAhEfABDgAeEgAhEfABDgAeEgAh~c5_300x400.jpeg',
-      author: '音频工程师',
-      date: '2024-03-15',
-      videoId: '7234567890123456794',
-      description: '专业音频调试教程，学习如何设置音频参数、降噪处理、音效添加等技巧。'
+  // 状态管理
+  const [tutorials, setTutorials] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // 获取教程数据
+  const fetchTutorials = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('开始获取教程数据...');
+
+      // 获取所有媒体数据
+      const allMediaData = await apiService.getAllMediaManifest();
+      console.log('获取到的所有媒体数据:', allMediaData);
+
+      // 获取教程类型的数据
+      const tutorialData = apiService.getMediaByType(allMediaData, 'tutorial');
+      console.log('获取到的教程数据:', tutorialData);
+
+      // 为抖音视频添加videoId字段
+      const tutorialsWithVideoId = tutorialData.map(item =>
+        apiService.addVideoId(item)
+      );
+
+      console.log('处理后的教程数据:', tutorialsWithVideoId);
+      setTutorials(tutorialsWithVideoId);
+
+    } catch (err) {
+      console.error('获取教程数据失败:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  // 组件挂载时获取数据
+  useEffect(() => {
+    fetchTutorials();
+  }, []);
 
   // 处理视频点击事件
-  const handleVideoClick = (videoId) => {
-    setCurrentVideoId(videoId);
-    setShowVideoModal(true);
+  const handleVideoClick = (tutorial) => {
+    console.log('点击教程:', tutorial.title);
+
+    // 如果是抖音平台的视频，使用videoId打开弹窗
+    if (tutorial.platform === 'douyin' && tutorial.videoId) {
+      setCurrentVideoId(tutorial.videoId);
+      setShowVideoModal(true);
+    } else if (tutorial.url) {
+      // 其他平台或有URL的情况，打开外部链接
+      if (window.electron) {
+        window.electron.openExternal(tutorial.url);
+      } else {
+        window.open(tutorial.url, '_blank');
+      }
+    } else {
+      console.log('无可用的视频链接');
+    }
   };
 
   // 关闭视频弹窗
@@ -124,53 +112,83 @@ function TutorialsPage() {
         <Link to="/app" className="text-indigo-400 hover:text-indigo-300 text-sm">返回首页</Link>
       </div>
 
-      {/* 教程列表 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tutorials.map(tutorial => (
-          <div
-            key={tutorial.id}
-            className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg border border-indigo-900/30 shadow-lg overflow-hidden hover:border-indigo-700/50 transition-colors"
-          >
-            <div className="relative cursor-pointer" onClick={() => handleVideoClick(tutorial.videoId)}>
-              <div className="h-40 bg-gray-800 overflow-hidden">
-                <img
-                  src={tutorial.coverImage}
-                  alt={tutorial.title}
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                  onError={(e) => {
-                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMzc0MTUxIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzlDQTNBRiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPuinhumikeWwgemdouWbvjwvdGV4dD48L3N2Zz4=';
-                  }}
-                />
-              </div>
-              <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 flex items-center justify-center transition-all duration-300">
-                <div className="opacity-0 hover:opacity-100 transition-opacity duration-300">
-                  <Play size={48} className="text-white drop-shadow-lg" />
-                </div>
-              </div>
-              <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
-                {tutorial.duration}
-              </div>
-            </div>
-            <div className="p-3">
-              <h2 className="text-lg font-semibold text-indigo-300 mb-1">{tutorial.title}</h2>
-              <p className="text-sm text-gray-400 mb-2 line-clamp-2">{tutorial.description}</p>
-              <div className="flex justify-between text-xs text-gray-400 mb-2">
-                <span>{tutorial.author}</span>
-                <span>{tutorial.views}次观看</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">{tutorial.date}</span>
-                <button
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                  onClick={() => handleVideoClick(tutorial.videoId)}
-                >
-                  观看教程
-                </button>
-              </div>
+      {/* 加载状态 */}
+      {loading && (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+          <span className="ml-3 text-gray-400">正在加载教程数据...</span>
+        </div>
+      )}
+
+      {/* 错误状态 */}
+      {error && (
+        <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 mb-4">
+          <div className="flex items-center">
+            <div className="text-red-400 mr-3">⚠️</div>
+            <div>
+              <h3 className="text-red-400 font-semibold">加载失败</h3>
+              <p className="text-red-300 text-sm mt-1">{error}</p>
+              <button
+                onClick={fetchTutorials}
+                className="mt-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
+              >
+                重试
+              </button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* 教程列表 */}
+      {!loading && !error && (
+        <>
+          {tutorials.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">
+              <div className="text-4xl mb-4">🎓</div>
+              <p>暂无教程数据</p>
+              <button
+                onClick={fetchTutorials}
+                className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors"
+              >
+                刷新数据
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {tutorials.map(tutorial => (
+                <WorkCard
+                  key={tutorial.id}
+                  id={tutorial.id}
+                  title={tutorial.title}
+                  description={tutorial.description}
+                  type={tutorial.type}
+                  url={tutorial.url}
+                  platform={tutorial.platform}
+                  playType={tutorial.playType}
+                  viewCount={tutorial.viewCount}
+                  isHot={tutorial.isHot}
+                  coverurl={tutorial.coverurl}
+                  thumbnail={tutorial.thumbnail}
+                  duration={tutorial.duration}
+                  level={tutorial.level}
+                  deviceModel={tutorial.deviceModel}
+                  downloadUrl={tutorial.downloadUrl}
+                  clickUrl={tutorial.clickUrl}
+                  version={tutorial.version}
+                  rating={tutorial.rating}
+                  videoId={tutorial.videoId}
+                  size="small"
+                  variant="compact"
+                  onClick={() => handleVideoClick(tutorial)}
+                  onSecondaryAction={() => handleVideoClick(tutorial)}
+                  secondaryActionText="观看教程"
+                  showActions={true}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* 视频播放弹窗 */}
       <VideoModal
