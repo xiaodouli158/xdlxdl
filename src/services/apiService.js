@@ -108,6 +108,20 @@ class ApiService {
   }
 
   /**
+   * Get advertisement data
+   * @returns {Promise<Array>} Array containing advertisement items
+   */
+  async getAdvertisementData() {
+    try {
+      const data = await this.get('/api/v1/media-manifest/public/category/advertisement');
+      return data;
+    } catch (error) {
+      console.error('Failed to get advertisement data:', error);
+      throw new Error('获取广告数据失败: ' + error.message);
+    }
+  }
+
+  /**
    * Get media items by type from the grouped data structure
    * @param {Object} mediaData - Media data object from server
    * @param {string} type - Type to get ('tutorial', 'advertisement', 'device', 'plugin')

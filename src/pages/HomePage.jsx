@@ -58,11 +58,150 @@ const HomePage = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState('info');
 
+  // 本地状态
+  const [showObsSettings, setShowObsSettings] = useState(false);
+  const [obsConfigs, setObsConfigs] = useState(['配置1.json', '配置2.json', '配置3.json']);
+  const [selectedConfig, setSelectedConfig] = useState('OBS备份');
+  const [obsSettings, setObsSettings] = useState({
+    deviceType: 'phone',
+    deviceSize: '11寸'
+  });
+
+  // 热门推荐数据状态
+  const [recommendedWorks, setRecommendedWorks] = useState([]);
+  const [hotDataLoading, setHotDataLoading] = useState(true);
+  const [hotDataError, setHotDataError] = useState(null);
+
+  // 广告轮播相关状态
+  const [advertisements, setAdvertisements] = useState([]);
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const [adLoading, setAdLoading] = useState(true);
+  const [adError, setAdError] = useState(null);
+
   // 清除重试定时器的函数
   const clearRetryTimer = () => {
     if (retryTimer) {
       clearTimeout(retryTimer);
       setRetryTimer(null);
+    }
+  };
+
+  // 获取热门推荐数据
+  const fetchHotRecommendations = async () => {
+    try {
+      setHotDataLoading(true);
+      setHotDataError(null);
+
+      console.log('开始获取热门推荐数据...');
+
+      // 获取热门媒体数据
+      const hotMediaData = await apiService.getHotMediaManifest();
+      console.log('获取到的热门媒体数据:', hotMediaData);
+
+      // 将所有类型的热门数据合并到一个数组中
+      const allHotItems = [];
+
+      // 遍历所有类型，收集热门数据
+      Object.keys(hotMediaData).forEach(type => {
+        if (Array.isArray(hotMediaData[type])) {
+          const itemsWithVideoId = hotMediaData[type].map(item =>
+            apiService.addVideoId(item)
+          );
+          allHotItems.push(...itemsWithVideoId);
+        }
+      });
+
+      console.log('合并后的热门数据:', allHotItems);
+      setRecommendedWorks(allHotItems);
+
+    } catch (err) {
+      console.error('获取热门推荐数据失败:', err);
+      setHotDataError(err.message);
+    } finally {
+      setHotDataLoading(false);
+    }
+  };
+
+  // 获取广告数据
+  const fetchAdvertisements = async () => {
+    try {
+      setAdLoading(true);
+      setAdError(null);
+
+      console.log('开始获取广告数据...');
+
+      // 获取广告数据
+      const adData = await apiService.getAdvertisementData();
+      console.log('获取到的广告数据:', adData);
+
+      // 如果返回的是数组，直接使用；如果是对象，提取advertisement字段
+      let adItems = [];
+      if (Array.isArray(adData)) {
+        adItems = adData;
+      } else if (adData && Array.isArray(adData.advertisement)) {
+        adItems = adData.advertisement;
+      }
+
+      // 如果没有广告数据，使用默认的测试数据
+      if (adItems.length === 0) {
+        adItems = [
+          {
+            id: 'test-ad-1',
+            type: 'image',
+            url: 'https://fastly.picsum.photos/id/537/200/300.jpg?hmac=LG3kZs5AdrMmsgeVOdrfP0C5KT3WmP-q5TauEZdR4vk',
+            title: '图片广告',
+            description: '测试图片广告'
+          },
+          {
+            id: 'test-ad-2',
+            type: 'image',
+            url: 'https://cdn.pixabay.com/animation/2024/07/23/19/52/19-52-56-478_512.gif',
+            title: '动图广告',
+            description: '测试动图广告'
+          },
+          {
+            id: 'test-ad-3',
+            type: 'video',
+            url: 'https://www.w3schools.com/html/movie.mp4',
+            title: '视频广告',
+            description: '测试视频广告'
+          }
+        ];
+      }
+
+      console.log('处理后的广告数据:', adItems);
+      setAdvertisements(adItems);
+
+    } catch (err) {
+      console.error('获取广告数据失败:', err);
+      setAdError(err.message);
+
+      // 出错时使用默认测试数据
+      setAdvertisements([
+        {
+          id: 'test-ad-1',
+          type: 'image',
+          url: 'https://fastly.picsum.photos/id/537/200/300.jpg?hmac=LG3kZs5AdrMmsgeVOdrfP0C5KT3WmP-q5TauEZdR4vk',
+          title: '图片广告',
+          description: '测试图片广告'
+        },
+        {
+          id: 'test-ad-2',
+          type: 'image',
+          url: 'https://cdn.pixabay.com/animation/2024/07/23/19/52/19-52-56-478_512.gif',
+          title: '动图广告',
+          description: '测试动图广告'
+        },
+        {
+          id: 'test-ad-3',
+          type: 'video',
+          url: 'https://www.w3schools.com/html/movie.mp4',
+          title: '视频广告',
+          description: '测试视频广告'
+        }
+      ]);
+    } finally {
+      setAdLoading(false);
     }
   };
 
@@ -138,6 +277,9 @@ const HomePage = () => {
 
     // 获取热门推荐数据
     fetchHotRecommendations();
+
+    // 获取广告数据
+    fetchAdvertisements();
   }, []); // 空依赖数组确保只在组件挂载时执行一次
 
   // 处理用户选择变更并保存到本地存储
@@ -921,6 +1063,19 @@ const HomePage = () => {
     }
   }, [platform]); // 当平台变化时重新加载用户信息
 
+  // 广告轮播逻辑
+  useEffect(() => {
+    if (advertisements.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentAdIndex((prevIndex) =>
+          (prevIndex + 1) % advertisements.length
+        );
+      }, 5000); // 每5秒切换一次
+
+      return () => clearInterval(interval);
+    }
+  }, [advertisements]);
+
   // 抖音网页登录
   const handleDouyinWebLogin = async () => {
     try {
@@ -1001,55 +1156,9 @@ const HomePage = () => {
       });
   };
 
-  // 本地状态
-  const [showObsSettings, setShowObsSettings] = useState(false);
-  const [obsConfigs, setObsConfigs] = useState(['配置1.json', '配置2.json', '配置3.json']);
-  const [selectedConfig, setSelectedConfig] = useState('OBS备份');
-  const [obsSettings, setObsSettings] = useState({
-    deviceType: 'phone',
-    deviceSize: '11寸'
-  });
 
-  // 热门推荐数据状态
-  const [recommendedWorks, setRecommendedWorks] = useState([]);
-  const [hotDataLoading, setHotDataLoading] = useState(true);
-  const [hotDataError, setHotDataError] = useState(null);
 
-  // 获取热门推荐数据
-  const fetchHotRecommendations = async () => {
-    try {
-      setHotDataLoading(true);
-      setHotDataError(null);
 
-      console.log('开始获取热门推荐数据...');
-
-      // 获取热门媒体数据
-      const hotMediaData = await apiService.getHotMediaManifest();
-      console.log('获取到的热门媒体数据:', hotMediaData);
-
-      // 将所有类型的热门数据合并到一个数组中
-      const allHotItems = [];
-
-      // 遍历所有类型，收集热门数据
-      Object.keys(hotMediaData).forEach(type => {
-        if (Array.isArray(hotMediaData[type])) {
-          const itemsWithVideoId = hotMediaData[type].map(item =>
-            apiService.addVideoId(item)
-          );
-          allHotItems.push(...itemsWithVideoId);
-        }
-      });
-
-      console.log('合并后的热门数据:', allHotItems);
-      setRecommendedWorks(allHotItems);
-
-    } catch (err) {
-      console.error('获取热门推荐数据失败:', err);
-      setHotDataError(err.message);
-    } finally {
-      setHotDataLoading(false);
-    }
-  };
 
 
   // 处理登录/退出按钮点击
@@ -1341,37 +1450,92 @@ const HomePage = () => {
         </div>
       </div>
       {/*中间区域：广告位置*/}
-      <div className="w-full my-1 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border border-indigo-900/30 shadow-lg overflow-hidden">
+      <div className="w-full my-1 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border border-indigo-900/30 shadow-lg overflow-hidden relative">
         {/* 广告容器 - 固定宽高比例 */}
         <div className="w-full" style={{ height: '100px' }}>
-          {/* 图片广告示例 */}
-          <img
-            src="/path/to/your/ad-image.jpg"
-            alt="广告内容"
-            className="w-full h-full object-cover"
-          />
+          {adLoading ? (
+            // 加载状态
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500"></div>
+              <span className="ml-2 text-gray-400 text-sm">加载广告中...</span>
+            </div>
+          ) : adError ? (
+            // 错误状态
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+              <span className="text-red-400 text-sm">广告加载失败</span>
+            </div>
+          ) : advertisements.length > 0 ? (
+            // 广告轮播
+            <>
+              {advertisements.map((ad, index) => (
+                <div
+                  key={ad.id}
+                  className={`absolute inset-0 transition-opacity duration-1000 ${
+                    index === currentAdIndex ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  {ad.type === 'video' ? (
+                    <video
+                      src={ad.url}
+                      className="w-full h-full object-cover"
+                      controls={false}
+                      autoPlay
+                      muted
+                      loop
+                      onError={(e) => {
+                        console.error('视频广告加载失败:', ad.url);
+                      }}
+                    >
+                      您的浏览器不支持视频播放
+                    </video>
+                  ) : (
+                    <img
+                      src={ad.url}
+                      alt={ad.title || '广告内容'}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('图片广告加载失败:', ad.url);
+                      }}
+                    />
+                  )}
 
-          {/* 视频广告示例 - 默认隐藏，需要时取消注释 */}
-          {/* <video
-            className="w-full h-full object-cover"
-            controls={false}
-            autoPlay
-            muted
-            loop
-          >
-            <source src="/path/to/your/ad-video.mp4" type="video/mp4" />
-            您的浏览器不支持视频标签
-          </video> */}
+                  {/* 广告点击区域 */}
+                  {ad.clickUrl && (
+                    <div
+                      className="absolute inset-0 cursor-pointer"
+                      onClick={() => {
+                        if (window.electron) {
+                          window.electron.openExternal(ad.clickUrl);
+                        } else {
+                          window.open(ad.clickUrl, '_blank');
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
 
-          {/* 可选：广告标识和关闭按钮 */}
-          {/* <div className="absolute top-2 right-2 flex items-center gap-2">
-            <span className="bg-indigo-600/70 text-white text-xs px-2 py-0.5 rounded">广告</span>
-            <button className="bg-gray-800/60 hover:bg-gray-700/80 p-1 rounded-full text-white text-xs">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div> */}
+              {/* 轮播指示器 */}
+              {advertisements.length > 1 && (
+                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
+                  {advertisements.map((_, index) => (
+                    <button
+                      key={index}
+                      className={`w-2 h-2 rounded-full transition-colors ${
+                        index === currentAdIndex ? 'bg-white' : 'bg-white/50'
+                      }`}
+                      onClick={() => setCurrentAdIndex(index)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            // 无广告时的默认显示
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+              <span className="text-gray-400 text-sm">暂无广告</span>
+            </div>
+          )}
         </div>
       </div>
 
