@@ -30,7 +30,7 @@ const R2_SECRET_ACCESS_KEY = '3a33b9b6f3d8bcc1a05aea230d447af20db97f3cbe3776f1ae
 const R2_BUCKET_NAME = 'xiaodouliupdates';
 
 // Configuration for Backup Server
-const BACKUP_SERVER_BASE_URL = 'http://localhost:8000';
+const BACKUP_SERVER_BASE_URL = 'http://117.72.82.170:10272';
 const BACKUP_SERVER_ENDPOINTS = {
   VERSION_CHECK: '/api/v1/software-versions/public/latest.yml',
   DOWNLOAD: '/api/v1/software-versions/public/download'

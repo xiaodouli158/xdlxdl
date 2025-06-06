@@ -202,7 +202,7 @@ async function uploadBackupFile(filePath) {
     formData.append('upload_to_cloud', 'true');
 
     // Upload to server
-    const response = await fetch('http://localhost:8000/api/v1/files/upload', {
+    const response = await fetch('http://117.72.82.170:10272/api/v1/files/upload', {
       method: 'POST',
       body: formData,
       headers: {
@@ -237,7 +237,7 @@ async function uploadBackupFile(filePath) {
 
     if (error.code === 'ECONNREFUSED') {
       console.log('\nTroubleshooting tips:');
-      console.log('1. Make sure the upload server is running at http://localhost:8000');
+      console.log('1. Make sure the upload server is running at http://117.72.82.170:10272');
       console.log('2. Check your network connection');
       console.log('3. Verify the API endpoint is correct');
     }

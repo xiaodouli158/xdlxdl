@@ -2,11 +2,13 @@
  * API Service - Handles HTTP requests to the backend server
  */
 
-const API_BASE_URL = 'http://localhost:8000';
+// 在开发环境中使用代理，在生产环境中使用完整URL
+const API_BASE_URL = import.meta.env.DEV ? '' : 'http://117.72.82.170:10272';
 
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
+    console.log('ApiService initialized with baseURL:', this.baseURL);
   }
 
   /**
@@ -27,6 +29,7 @@ class ApiService {
           'Content-Type': 'application/json',
           ...options.headers
         },
+        mode: 'cors', // 明确设置CORS模式
         ...options
       });
 
