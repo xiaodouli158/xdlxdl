@@ -48,8 +48,8 @@ export const getIconConfig = (platform = 'win') => {
         menuCategory: false,
         oneClick: false,
         allowToChangeInstallationDirectory: true,
-        createDesktopShortcut: 'always',
-        createStartMenuShortcut: 'always'
+        createDesktopShortcut: true,
+        createStartMenuShortcut: true
       }
     },
     

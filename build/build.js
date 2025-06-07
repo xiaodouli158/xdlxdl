@@ -41,8 +41,8 @@ const config = {
     uninstallerIcon: iconConfig.nsis.uninstallerIcon,
     deleteAppDataOnUninstall: false,
     runAfterFinish: false,
-    createDesktopShortcut: 'always',
-    createStartMenuShortcut: 'always'
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true
   }
 };
 
