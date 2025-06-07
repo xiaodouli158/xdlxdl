@@ -12,7 +12,7 @@ import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
 import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
 import { registerOBSConfigHandlers } from './modules/obsConfigHandlers.js';
 import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
-import { initializePaths } from './utils/pathManager.js';
+import { initializePaths, getPath, PathType } from './utils/pathManager.js';
 import { initUpdateChecker } from './update-checker.js';
 import { getSystemInfo } from './utils/hardware-info.js';
 
@@ -21,6 +21,80 @@ const execAsync = promisify(exec);
 const fsAccess = promisify(fs.access);
 const fsReadFile = promisify(fs.readFile);
 const fsWriteFile = promisify(fs.writeFile);
+
+/**
+ * 获取应用图标路径
+ * 在开发环境和打包环境中都能正确工作
+ * @returns {string} 图标文件路径
+ */
+function getAppIcon() {
+  try {
+    // 在打包后的应用中，资源文件位于 resources 目录下
+    if (app.isPackaged) {
+      // 尝试多个可能的路径
+      const possiblePaths = [
+        // extraResources 中的文件会被复制到 resources 目录下
+        path.join(process.resourcesPath, 'public', 'icons', 'icon-32x32.ico'),
+        path.join(process.resourcesPath, 'public', 'xdllogo.ico'),
+        // 备用路径
+        path.join(process.resourcesPath, 'app', 'public', 'icons', 'icon-32x32.ico'),
+        path.join(process.resourcesPath, 'app', 'public', 'xdllogo.ico'),
+        path.join(__dirname, '../public/icons/icon-32x32.ico'),
+        path.join(__dirname, '../public/xdllogo.ico'),
+        path.join(__dirname, '../../public/icons/icon-32x32.ico'),
+        path.join(__dirname, '../../public/xdllogo.ico')
+      ];
+
+      console.log('Searching for app icon in packaged app...');
+      for (const iconPath of possiblePaths) {
+        console.log('Checking path:', iconPath);
+        if (fs.existsSync(iconPath)) {
+          console.log('Found app icon at:', iconPath);
+          return iconPath;
+        }
+      }
+
+      console.warn('App icon not found in packaged app, listing resources directory...');
+      try {
+        const resourcesDir = process.resourcesPath;
+        console.log('Resources directory:', resourcesDir);
+        if (fs.existsSync(resourcesDir)) {
+          const files = fs.readdirSync(resourcesDir);
+          console.log('Files in resources directory:', files);
+
+          const publicDir = path.join(resourcesDir, 'public');
+          if (fs.existsSync(publicDir)) {
+            const publicFiles = fs.readdirSync(publicDir);
+            console.log('Files in public directory:', publicFiles);
+          }
+        }
+      } catch (listError) {
+        console.error('Error listing resources directory:', listError);
+      }
+
+      return null;
+    } else {
+      // 开发环境
+      const iconPaths = [
+        path.join(__dirname, '../public/icons/icon-32x32.ico'),
+        path.join(__dirname, '../public/xdllogo.ico')
+      ];
+
+      for (const iconPath of iconPaths) {
+        if (fs.existsSync(iconPath)) {
+          console.log('Found app icon at:', iconPath);
+          return iconPath;
+        }
+      }
+
+      console.warn('App icon not found in development');
+      return null;
+    }
+  } catch (error) {
+    console.error('Error getting app icon:', error);
+    return null;
+  }
+}
 
 /**
  * 检查MediaSDK_Server.exe进程是否正在运行
@@ -91,6 +165,10 @@ let authTimeoutId = null;
 function createWindow() {
   try {
     console.log('Creating main window...');
+    // 获取应用图标
+    const appIcon = getAppIcon();
+    console.log('Using app icon:', appIcon);
+
     // 创建浏览器窗口，设置为830x660，并移除默认标题栏
     mainWindow = new BrowserWindow({
       width: 800,
@@ -103,8 +181,19 @@ function createWindow() {
       resizable: false,
       frame: false, // 移除默认窗口边框
       titleBarStyle: 'hidden', // 隐藏标题栏
-      icon: path.join(__dirname, '../public/icons/icon-32x32.ico'), // 设置应用图标
+      icon: appIcon, // 设置应用图标
+      show: true, // 直接显示窗口
     });
+
+    // 设置任务栏图标
+    if (appIcon && process.platform === 'win32') {
+      try {
+        mainWindow.setIcon(appIcon);
+        console.log('Taskbar icon set successfully');
+      } catch (error) {
+        console.error('Failed to set taskbar icon:', error);
+      }
+    }
 
     // 开发环境下使用Vite开发服务器
     if (!app.isPackaged) {
@@ -198,6 +287,37 @@ app.whenReady().then(async () => {
   // 添加获取应用版本的IPC处理程序
   ipcMain.handle('get-app-version', () => {
     return app.getVersion();
+  });
+
+  // 添加获取xdllogo.ico绝对路径的IPC处理程序
+  ipcMain.handle('get-icon-path', () => {
+    try {
+      let iconPath;
+
+      if (app.isPackaged) {
+        // 生产环境：从 extraResources 中获取图标
+        iconPath = path.join(process.resourcesPath, 'public', 'xdllogo.ico');
+        console.log('生产环境图标路径:', iconPath);
+      } else {
+        // 开发环境：从项目目录获取图标
+        iconPath = path.join(__dirname, '..', 'public', 'xdllogo.ico');
+        console.log('开发环境图标路径:', iconPath);
+      }
+
+      if (fs.existsSync(iconPath)) {
+        // 返回file://协议的绝对路径，确保路径格式正确
+        const normalizedPath = iconPath.replace(/\\/g, '/');
+        const fileUrl = `file:///${normalizedPath}`;
+        console.log('图标文件存在，返回路径:', fileUrl);
+        return fileUrl;
+      } else {
+        console.warn('图标文件不存在:', iconPath);
+        return null;
+      }
+    } catch (error) {
+      console.error('获取图标路径时出错:', error);
+      return null;
+    }
   });
 
   createWindow();

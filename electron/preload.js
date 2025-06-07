@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // 应用信息
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getIconPath: () => ipcRenderer.invoke('get-icon-path'),
 
   // 系统硬件信息
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),

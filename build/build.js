@@ -21,6 +21,24 @@ const config = {
     buildResources: 'build',
     output: 'dist'
   },
+  files: [
+    'dist/**/*',
+    'electron/**/*',
+    'public/icons/**/*',
+    'public/xdllogo.ico',
+    'package.json'
+  ],
+  extraResources: [
+    {
+      from: 'public/icons',
+      to: 'public/icons',
+      filter: ['**/*']
+    },
+    {
+      from: 'public/xdllogo.ico',
+      to: 'public/xdllogo.ico'
+    }
+  ],
   win: {
     target: ['nsis'],
     signAndEditExecutable: false,

@@ -6,9 +6,11 @@ const TitleBar = () => {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [appVersion, setAppVersion] = useState('');
+  const [iconPath, setIconPath] = useState('/xdllogo.ico');
+  const [isProduction, setIsProduction] = useState(false);
   const navigate = useNavigate();
 
-  // 检查 electron 对象是否可用并获取应用版本
+  // 检查 electron 对象是否可用并获取应用版本和图标路径
   useEffect(() => {
     console.log('Window.electron:', window.electron);
     if (!window.electron) {
@@ -17,6 +19,7 @@ const TitleBar = () => {
       setAppVersion('1.3.5');
     } else {
       console.log('Electron API 可用');
+
       // 获取应用版本
       window.electron.getAppVersion()
         .then(version => {
@@ -25,9 +28,26 @@ const TitleBar = () => {
         })
         .catch(error => {
           console.error('获取应用版本时出错:', error);
-          // 从package.json获取版本号作为备用
           setAppVersion('1.3.5');
         });
+
+      // 检查是否为生产环境（打包后的应用）
+      if (window.electron && window.electron.getIconPath) {
+        setIsProduction(true);
+        // 在生产环境中，获取图标的绝对路径
+        window.electron.getIconPath()
+          .then(path => {
+            console.log('生产环境图标路径:', path);
+            setIconPath(path);
+          })
+          .catch(error => {
+            console.error('获取生产环境图标路径失败:', error);
+            // 保持默认路径
+          });
+      } else {
+        // 开发环境，使用相对路径
+        console.log('开发环境，使用相对路径');
+      }
     }
   }, []);
 
@@ -78,12 +98,21 @@ const TitleBar = () => {
     <div className="bg-slate-800 text-white h-10 flex items-center justify-between select-none drag">
       {/* 应用标题 */}
       <div className="px-3 font-medium text-base flex items-center">
-        <div className="w-8 h-8 mr-3 flex-shrink-0 -my-2" style={{
-          backgroundImage: 'url(/xdllogo.ico)',
-          backgroundSize: 'contain',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
-        }}></div>
+        <img
+          src={iconPath}
+          alt="小斗笠直播助手"
+          className="w-6 h-6 mr-3 flex-shrink-0"
+          onLoad={() => {
+            console.log('图标加载成功:', iconPath);
+          }}
+          onError={(e) => {
+            console.error('图标加载失败:', iconPath);
+            // 如果加载失败，尝试使用备用图标
+            if (iconPath !== '/favicon.ico') {
+              setIconPath('/favicon.ico');
+            }
+          }}
+        />
         <span>小斗笠直播助手</span>
         <span className="ml-2 text-xs text-gray-400">v{appVersion}</span>
       </div>
