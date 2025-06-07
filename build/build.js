@@ -21,7 +21,8 @@ const config = {
     target: ['nsis'],
     signAndEditExecutable: false,
     requestedExecutionLevel: 'requireAdministrator',
-    icon: 'public/xdllogo.ico'
+    icon: 'build/xdllogo.ico',
+    verifyUpdateCodeSignature: false
   },
   nsis: {
     oneClick: false,
@@ -32,10 +33,23 @@ const config = {
     shortcutName: '小斗笠直播助手',
     include: 'build/installer.nsh',
     artifactName: '小斗笠直播助手-Setup-${version}.${ext}',
-    installerIcon: 'public/xdllogo.ico',
-    uninstallerIcon: 'public/xdllogo.ico'
+    installerIcon: 'build/xdllogo.ico',
+    uninstallerIcon: 'build/xdllogo.ico',
+    deleteAppDataOnUninstall: false,
+    runAfterFinish: false,
+    createDesktopShortcut: 'always',
+    createStartMenuShortcut: 'always'
   }
 };
+
+// Run icon check before build
+console.log('Checking icon configuration...');
+try {
+  const { execSync } = await import('child_process');
+  execSync('node build/check-icon.js', { stdio: 'inherit' });
+} catch (error) {
+  console.warn('Icon check failed:', error.message);
+}
 
 // Log build start
 console.log('Starting Electron build with configuration:', JSON.stringify(config, null, 2));
