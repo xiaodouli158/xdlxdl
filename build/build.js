@@ -1,10 +1,14 @@
 import { build, Platform } from 'electron-builder';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getIconConfig } from './icon-config.js';
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Get optimized icon configuration
+const iconConfig = getIconConfig('win');
 
 // Define build configuration
 const config = {
@@ -21,7 +25,7 @@ const config = {
     target: ['nsis'],
     signAndEditExecutable: false,
     requestedExecutionLevel: 'requireAdministrator',
-    icon: 'build/xdllogo.ico',
+    icon: iconConfig.icon,
     verifyUpdateCodeSignature: false
   },
   nsis: {
@@ -33,8 +37,8 @@ const config = {
     shortcutName: '小斗笠直播助手',
     include: 'build/installer.nsh',
     artifactName: '小斗笠直播助手-Setup-${version}.${ext}',
-    installerIcon: 'build/xdllogo.ico',
-    uninstallerIcon: 'build/xdllogo.ico',
+    installerIcon: iconConfig.nsis.installerIcon,
+    uninstallerIcon: iconConfig.nsis.uninstallerIcon,
     deleteAppDataOnUninstall: false,
     runAfterFinish: false,
     createDesktopShortcut: 'always',

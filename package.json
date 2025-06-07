@@ -28,7 +28,7 @@
     ],
     "win": {
       "target": ["nsis"],
-      "icon": "public/xdllogo.ico"
+      "icon": "public/icons/icon-256x256.png"
     }
   },
   "dependencies": {
