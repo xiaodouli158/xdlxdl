@@ -47,20 +47,28 @@ const config = {
     verifyUpdateCodeSignature: false
   },
   nsis: {
-    oneClick: false,
-    allowToChangeInstallationDirectory: true,
+    oneClick: true,  // 启用一键安装（带进度条的静默安装）
+    allowToChangeInstallationDirectory: false,  // 不允许更改安装目录
     perMachine: false,
-    createDesktopShortcut: true,
-    createStartMenuShortcut: true,
+    // 禁用默认快捷方式创建，我们在自定义脚本中创建
+    createDesktopShortcut: false,
+    createStartMenuShortcut: false,
     shortcutName: '小斗笠直播助手',
     include: 'build/installer.nsh',
     artifactName: '小斗笠直播助手-Setup-${version}.${ext}',
     installerIcon: iconConfig.nsis.installerIcon,
     uninstallerIcon: iconConfig.nsis.uninstallerIcon,
     deleteAppDataOnUninstall: false,
-    runAfterFinish: false,
-    createDesktopShortcut: true,
-    createStartMenuShortcut: true
+    runAfterFinish: true,  // 安装完成后启动应用程序
+    displayLanguageSelector: false,
+    // 带进度条的静默安装选项
+    allowElevation: true,
+    warningsAsErrors: false,
+    // 支持静默安装参数
+    installerHeaderIcon: iconConfig.nsis.installerIcon,
+    // 进度条和界面设置
+    installerSidebar: iconConfig.nsis.installerIcon,  // 安装侧边栏图标
+    uninstallerSidebar: iconConfig.nsis.uninstallerIcon  // 卸载侧边栏图标
   }
 };
 
