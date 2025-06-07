@@ -157,44 +157,69 @@ async function getVersionInfoFromR2() {
 
 // Parse YAML-like content to extract version information
 function parseLatestYml(yamlContent) {
-  const lines = yamlContent.split('\n');
-  const versionInfo = {};
-  let inFilesSection = false;
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('#') || !trimmedLine) continue;
-
-    // Check if we're entering the files section
-    if (trimmedLine === 'files:') {
-      inFilesSection = true;
-      continue;
-    }
-
-    // If we're in files section and encounter a non-indented line, we're out of files section
-    if (inFilesSection && !line.startsWith(' ') && !line.startsWith('\t')) {
-      inFilesSection = false;
-    }
-
-    if (trimmedLine.startsWith('version:')) {
-      versionInfo.version = trimmedLine.split(':')[1].trim();
-    } else if (trimmedLine.startsWith('path:')) {
-      versionInfo.fileName = trimmedLine.split(':')[1].trim();
-    } else if (trimmedLine.startsWith('sha512:') && !versionInfo.sha512) {
-      versionInfo.sha512 = trimmedLine.split(':')[1].trim();
-    } else if (trimmedLine.startsWith('releaseDate:')) {
-      versionInfo.releaseDate = trimmedLine.split(':')[1].trim().replace(/'/g, '');
-    } else if (inFilesSection && trimmedLine.startsWith('- url:')) {
-      versionInfo.fileName = trimmedLine.split('url:')[1].trim();
-    } else if (inFilesSection && trimmedLine.startsWith('url:')) {
-      versionInfo.fileName = trimmedLine.split(':')[1].trim();
-    } else if (trimmedLine.startsWith('size:')) {
-      versionInfo.size = parseInt(trimmedLine.split(':')[1].trim());
-    }
+  if (!yamlContent || typeof yamlContent !== 'string') {
+    console.error('Invalid YAML content provided to parseLatestYml');
+    return { version: '0.0.0', fileName: '', serverSource: 'UNKNOWN' };
   }
 
-  console.log('Parsed YAML version info:', versionInfo);
-  return versionInfo;
+  try {
+    const lines = yamlContent.split('\n');
+    const versionInfo = {};
+    let inFilesSection = false;
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.startsWith('#') || !trimmedLine) continue;
+
+      // Check if we're entering the files section
+      if (trimmedLine === 'files:') {
+        inFilesSection = true;
+        continue;
+      }
+
+      // If we're in files section and encounter a non-indented line, we're out of files section
+      if (inFilesSection && !line.startsWith(' ') && !line.startsWith('\t')) {
+        inFilesSection = false;
+      }
+
+      if (trimmedLine.startsWith('version:')) {
+        const versionPart = trimmedLine.split(':')[1];
+        versionInfo.version = versionPart ? versionPart.trim() : '0.0.0';
+      } else if (trimmedLine.startsWith('path:')) {
+        const pathPart = trimmedLine.split(':')[1];
+        versionInfo.fileName = pathPart ? pathPart.trim() : '';
+      } else if (trimmedLine.startsWith('sha512:') && !versionInfo.sha512) {
+        const sha512Part = trimmedLine.split(':')[1];
+        versionInfo.sha512 = sha512Part ? sha512Part.trim() : '';
+      } else if (trimmedLine.startsWith('releaseDate:')) {
+        const datePart = trimmedLine.split(':')[1];
+        versionInfo.releaseDate = datePart ? datePart.trim().replace(/'/g, '') : '';
+      } else if (inFilesSection && trimmedLine.startsWith('- url:')) {
+        const urlPart = trimmedLine.split('url:')[1];
+        versionInfo.fileName = urlPart ? urlPart.trim() : '';
+      } else if (inFilesSection && trimmedLine.startsWith('url:')) {
+        const urlPart = trimmedLine.split(':')[1];
+        versionInfo.fileName = urlPart ? urlPart.trim() : '';
+      } else if (trimmedLine.startsWith('size:')) {
+        const sizePart = trimmedLine.split(':')[1];
+        versionInfo.size = sizePart ? parseInt(sizePart.trim()) || 0 : 0;
+      }
+    }
+
+    // 确保必要的字段存在
+    if (!versionInfo.version) {
+      versionInfo.version = '0.0.0';
+    }
+    if (!versionInfo.fileName) {
+      versionInfo.fileName = '';
+    }
+
+    console.log('Parsed YAML version info:', versionInfo);
+    return versionInfo;
+  } catch (error) {
+    console.error('Error parsing YAML content:', error.message);
+    return { version: '0.0.0', fileName: '', serverSource: 'UNKNOWN' };
+  }
 }
 
 // Get version info from backup server
@@ -270,21 +295,36 @@ async function getVersionInfoWithFallback() {
 
 // Compare versions (simple semver comparison)
 function isNewerVersion(current, latest) {
-  const currentParts = current.split('.').map(Number);
-  const latestParts = latest.split('.').map(Number);
-
-  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-    const currentPart = currentParts[i] || 0;
-    const latestPart = latestParts[i] || 0;
-
-    if (latestPart > currentPart) {
-      return true;
-    } else if (latestPart < currentPart) {
-      return false;
-    }
+  // 验证输入参数
+  if (!current || !latest) {
+    console.warn('isNewerVersion: Invalid version parameters', { current, latest });
+    return false;
   }
 
-  return false;
+  // 确保参数是字符串
+  const currentStr = String(current);
+  const latestStr = String(latest);
+
+  try {
+    const currentParts = currentStr.split('.').map(Number);
+    const latestParts = latestStr.split('.').map(Number);
+
+    for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
+      const currentPart = currentParts[i] || 0;
+      const latestPart = latestParts[i] || 0;
+
+      if (latestPart > currentPart) {
+        return true;
+      } else if (latestPart < currentPart) {
+        return false;
+      }
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error comparing versions:', error.message, { current, latest });
+    return false;
+  }
 }
 
 // Show update dialog (now just logs the update info and returns true to download)
@@ -574,7 +614,7 @@ function showProgressDialog(versionInfo) {
           // Update percentage display
           document.getElementById('progress-percent').textContent = percent + '%';
 
-          if (status) {
+          if (status && typeof status === 'string') {
             // Extract speed information if present
             const parts = status.split(' - ');
             if (parts.length > 1) {
@@ -1231,9 +1271,13 @@ export async function checkForUpdates(force = false) {
       }
     }
 
-    console.log(`Current version: ${currentVersion}, Latest version: ${versionInfo.version}`);
+    // 确保版本信息有效
+    const safeCurrentVersion = currentVersion || '2.0.0';
+    const safeLatestVersion = versionInfo?.version || '0.0.0';
 
-    if (isNewerVersion(currentVersion, versionInfo.version)) {
+    console.log(`Current version: ${safeCurrentVersion}, Latest version: ${safeLatestVersion}`);
+
+    if (isNewerVersion(safeCurrentVersion, safeLatestVersion)) {
       console.log('New version available');
 
       // 禁用主窗口交互
