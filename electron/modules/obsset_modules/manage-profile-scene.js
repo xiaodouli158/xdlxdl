@@ -455,8 +455,32 @@ async function manageProfileAndSceneCollection(options) {
                   // 使用pathManager获取应用根目录，确保在开发和生产环境中都能正确找到图片
                   let imagePath;
                   if (app.isPackaged) {
-                    // 生产环境路径
-                    imagePath = path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'public', 'images', 'winer.gif');
+                    // 生产环境 - 尝试多个可能的路径
+                    const possiblePaths = [
+                      // 标准打包路径
+                      path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'public', 'images', 'winer.gif'),
+                      // 备用路径1 - 直接在resources下
+                      path.join(path.dirname(app.getPath('exe')), 'resources', 'public', 'images', 'winer.gif'),
+                      // 备用路径2 - 在app目录下
+                      path.join(app.getAppPath(), 'public', 'images', 'winer.gif'),
+                      // 备用路径3 - 在extraResources中
+                      path.join(process.resourcesPath, 'public', 'images', 'winer.gif')
+                    ];
+
+                    // 尝试找到存在的图片文件
+                    for (const imgPath of possiblePaths) {
+                      if (fs.existsSync(imgPath)) {
+                        imagePath = imgPath;
+                        console.log(`找到动图文件: ${imagePath}`);
+                        break;
+                      }
+                    }
+
+                    // 如果都没找到，使用第一个路径（用于错误报告）
+                    if (!imagePath) {
+                      console.warn('未找到动图文件，尝试的路径:', possiblePaths);
+                      imagePath = possiblePaths[0];
+                    }
                   } else {
                     // 开发环境路径
                     imagePath = path.join(app.getAppPath(), 'public', 'images', 'winer.gif');

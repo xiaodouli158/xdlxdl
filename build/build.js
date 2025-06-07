@@ -25,6 +25,8 @@ const config = {
     'dist/**/*',
     'electron/**/*',
     'public/icons/**/*',
+    'public/fonts/**/*',
+    'public/images/**/*',
     'public/xdllogo.ico',
     'package.json'
   ],
@@ -32,6 +34,16 @@ const config = {
     {
       from: 'public/icons',
       to: 'public/icons',
+      filter: ['**/*']
+    },
+    {
+      from: 'public/fonts',
+      to: 'public/fonts',
+      filter: ['**/*']
+    },
+    {
+      from: 'public/images',
+      to: 'public/images',
       filter: ['**/*']
     },
     {

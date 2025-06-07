@@ -14,8 +14,29 @@ function getFontPath() {
   const fontFileName = 'CangErShuYuanTiW04-2.ttf';
 
   if (app.isPackaged) {
-    // 生产环境 - 字体文件在打包后的resources目录中
-    return path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'public', 'fonts', fontFileName);
+    // 生产环境 - 尝试多个可能的路径
+    const possiblePaths = [
+      // 标准打包路径
+      path.join(path.dirname(app.getPath('exe')), 'resources', 'app', 'public', 'fonts', fontFileName),
+      // 备用路径1 - 直接在resources下
+      path.join(path.dirname(app.getPath('exe')), 'resources', 'public', 'fonts', fontFileName),
+      // 备用路径2 - 在app目录下
+      path.join(app.getAppPath(), 'public', 'fonts', fontFileName),
+      // 备用路径3 - 在extraResources中
+      path.join(process.resourcesPath, 'public', 'fonts', fontFileName)
+    ];
+
+    // 尝试找到存在的字体文件
+    for (const fontPath of possiblePaths) {
+      if (fs.existsSync(fontPath)) {
+        console.log(`找到字体文件: ${fontPath}`);
+        return fontPath;
+      }
+    }
+
+    // 如果都没找到，返回第一个路径（用于错误报告）
+    console.warn('未找到字体文件，尝试的路径:', possiblePaths);
+    return possiblePaths[0];
   } else {
     // 开发环境 - 字体文件在项目的public/fonts目录中
     return path.join(app.getAppPath(), 'public', 'fonts', fontFileName);
