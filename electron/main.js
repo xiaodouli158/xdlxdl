@@ -13,7 +13,7 @@ import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js'
 import { registerOBSConfigHandlers } from './modules/obsConfigHandlers.js';
 import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
 import { initializePaths } from './utils/pathManager.js';
-import { initUpdateChecker } from '../build/update-checker.js';
+import { initUpdateChecker } from './update-checker.js';
 import { getSystemInfo } from './utils/hardware-info.js';
 
 // 将回调函数转换为 Promise
@@ -103,7 +103,7 @@ function createWindow() {
       resizable: false,
       frame: false, // 移除默认窗口边框
       titleBarStyle: 'hidden', // 隐藏标题栏
-      icon: path.join(__dirname, '../build/xdllogo.ico'), // 设置应用图标
+      icon: path.join(__dirname, '../public/xdllogo.ico'), // 设置应用图标
     });
 
     // 开发环境下使用Vite开发服务器
@@ -782,7 +782,7 @@ app.whenReady().then(async () => {
     try {
       console.log('Manual update check requested from renderer process');
       // 导入checkForUpdates函数
-      const { checkForUpdates } = await import('../build/update-checker.js');
+      const { checkForUpdates } = await import('./update-checker.js');
       // 强制检查更新（显示对话框）
       await checkForUpdates(true);
       return { success: true };

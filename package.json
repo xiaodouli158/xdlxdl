@@ -1,7 +1,7 @@
 {
   "name": "xiaodouli",
-  "version": "1.3.5",
-  "description": "简单的Electron + React + Tailwind CSS应用",
+  "version": "2.0.0",
+  "description": "提升您的直播体验",
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
@@ -19,14 +19,15 @@
   "author": "",
   "license": "MIT",
   "build": {
-    "appId": "com.example.myapp",
+    "appId": "com.xdlwebcast.app",
     "productName": "小斗笠直播助手",
+    "executableName": "小斗笠直播助手",
     "files": [
       "dist/**/*",
       "electron/**/*"
     ],
     "win": {
-      "target": "portable",
+      "target": ["nsis"],
       "icon": "public/xdllogo.ico"
     }
   },

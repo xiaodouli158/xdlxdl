@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const config = {
   appId: 'com.xdlwebcast.app',
   productName: '小斗笠直播助手',
+  executableName: '小斗笠直播助手',
   asar: true,
   compression: 'maximum',
   directories: {

@@ -5,7 +5,7 @@
  *
  * It can be used in two ways:
  * 1. As a module imported by the main process to check for updates
- * 2. As a standalone script to manually check for updates (node build/update-checker.js)
+ * 2. As a standalone script to manually check for updates (node electron/update-checker.js)
  */
 
 import { app, dialog, BrowserWindow } from 'electron';
@@ -1287,7 +1287,7 @@ export function initUpdateChecker() {
 }
 
 // CLI functionality for manual checks
-// This code will only run if this file is executed directly (node build/update-checker.js)
+// This code will only run if this file is executed directly (node electron/update-checker.js)
 if (import.meta.url === `file://${process.argv[1]}`) {
   // Check if Electron app is available
   if (typeof app === 'undefined') {
