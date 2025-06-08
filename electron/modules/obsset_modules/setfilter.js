@@ -13,7 +13,47 @@
 
 // Import required modules
 import os from 'os';
+import path from 'path';
+import { app } from 'electron';
 import OBSWebSocket from 'obs-websocket-js';
+
+/**
+ * Get the correct path for LUT file based on environment
+ * @returns {string} The absolute path to the original.cube file
+ */
+function getLUTFilePath() {
+  try {
+    let lutPath;
+
+    if (app.isPackaged) {
+      // Production environment: use process.resourcesPath
+      lutPath = path.join(process.resourcesPath, 'public', 'images', 'original.cube');
+    } else {
+      // Development environment: use relative path from current module
+      // Get the current file's directory using import.meta.url
+      const currentFileUrl = new URL(import.meta.url);
+      let currentDir = path.dirname(currentFileUrl.pathname);
+
+      // Fix Windows path issue - remove leading slash on Windows
+      if (process.platform === 'win32' && currentDir.startsWith('/')) {
+        currentDir = currentDir.substring(1);
+      }
+
+      // Navigate to project root and then to the LUT file
+      lutPath = path.join(currentDir, '..', '..', '..', 'public', 'images', 'original.cube');
+
+      // Normalize the path to resolve any .. segments
+      lutPath = path.resolve(lutPath);
+    }
+
+    console.log(`LUT file path resolved to: ${lutPath}`);
+    return lutPath;
+  } catch (error) {
+    console.error('Error resolving LUT file path:', error);
+    // Fallback to relative path
+    return './public/images/original.cube';
+  }
+}
 
 /**
  * Default filter names and settings
@@ -45,7 +85,7 @@ const DEFAULT_FILTERS = {
   lutFilterName: '应用 LUT', // "Apply LUT" in Chinese
   lutFilterKind: 'clut_filter', // Filter kind for Apply LUT
   lutFilterSettings: {
-    image_path: 'C:/Program Files/obs-studio/data/obs-plugins/obs-filters/LUTs/original.cube'
+    image_path: getLUTFilePath()
   },
 
   // Sharpness filter
@@ -72,6 +112,15 @@ function getVideoCaptureInputKind() {
 }
 
 /**
+ * Ensure a number is even, if odd add 1 to make it even
+ * @param {number} value - The value to make even
+ * @returns {number} Even number
+ */
+function ensureEven(value) {
+  return value % 2 === 0 ? value : value + 1;
+}
+
+/**
  * Calculate scaling and cropping values based on aspect ratio
  * @param {number} width - The width of the source
  * @param {number} height - The height of the source
@@ -92,8 +141,8 @@ function calculateScalingAndCropping(width, height) {
   if (aspectRatio > standardRatio) {
     // If wider than 16:9, scale based on width
     console.log('Device is wider than 16:9, scaling based on width');
-    scaleWidth = width;
-    scaleHeight = Math.round(width / standardRatio);
+    scaleWidth = ensureEven(width);
+    scaleHeight = ensureEven(Math.round(width / standardRatio));
 
     // Calculate crop values (crop top and bottom)
     cropLeft = 0;
@@ -104,8 +153,8 @@ function calculateScalingAndCropping(width, height) {
   } else {
     // If narrower than or equal to 16:9, scale based on height
     console.log('Device is narrower than or equal to 16:9, scaling based on height');
-    scaleHeight = height;
-    scaleWidth = Math.round(height * standardRatio);
+    scaleHeight = ensureEven(height);
+    scaleWidth = ensureEven(Math.round(height * standardRatio));
 
     // Calculate crop values (crop left and right)
     cropTop = 0;
@@ -377,6 +426,7 @@ async function addDefaultFilters(width = 1920, height = 1080, obs) {
 // Export functions and constants
 export {
   DEFAULT_FILTERS,
+  getLUTFilePath,
   getVideoCaptureInputKind,
   calculateScalingAndCropping,
   addScaleFilter,

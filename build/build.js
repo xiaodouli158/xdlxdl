@@ -84,13 +84,22 @@ const config = {
   }
 };
 
-// Run icon check before build
-console.log('Checking icon configuration...');
+// Run resource checks before build
+console.log('Checking resources and configuration...');
 try {
   const { execSync } = await import('child_process');
+
+  // Check icons
+  console.log('Checking icon configuration...');
   execSync('node build/check-icon.js', { stdio: 'inherit' });
+
+  // Check all resources including LUT file
+  console.log('Checking all resources...');
+  execSync('node build/check-resources.js', { stdio: 'inherit' });
+
 } catch (error) {
-  console.warn('Icon check failed:', error.message);
+  console.warn('Resource check failed:', error.message);
+  console.warn('Continuing with build, but some resources might be missing...');
 }
 
 // Log build start

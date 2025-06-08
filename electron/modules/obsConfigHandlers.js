@@ -213,7 +213,7 @@ async function oneClickConfigureOBS(options) {
       results.message = 'One-click OBS configuration failed: Failed to configure OBS profile';
       return results;
     }
-    // Step 4: Configure source transform
+    // // Step 4: Configure source transform
     const configResult = await configureSourceTransform();
 
     // 将配置结果添加到 results 对象中，以便后续使用

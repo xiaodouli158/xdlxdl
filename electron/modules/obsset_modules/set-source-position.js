@@ -122,9 +122,9 @@ async function setSourceTransform(obs, sourceName, posx, posy, alignment = 5, us
         const canvasHeight = videoSettings.baseHeight;
         console.log(`Canvas height: ${canvasHeight}`);
 
-        // Calculate target height (55/1080 of canvas height)
-        const targetHeight = 55 / 1080 * canvasHeight;
-        console.log(`Target height: ${targetHeight} (55/1080 of canvas height)`);
+        // Calculate target height (52/1080 of canvas height)
+        const targetHeight = 52 / 1080 * canvasHeight;
+        console.log(`Target height: ${targetHeight} (52/1080 of canvas height)`);
 
         // Get current source height in the canvas
         const currentHeight = sceneItemTransform.height;
@@ -286,7 +286,7 @@ async function configureSourceTransform(address = 'localhost:4455', password = '
 
     console.log('Positioning "榜一" source...');
     try {
-      const imagewidth = (posHeight * 55 / 1080 * 567 / 376) + 5;
+      const imagewidth = (posHeight * 52 / 1080 * 567 / 376) + 5;
       await setSourceTransform(obs, '榜一', imagewidth, posHeight, 9, true);
       console.log('Successfully positioned "榜一" source');
     } catch (error) {

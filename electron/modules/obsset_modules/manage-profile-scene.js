@@ -18,14 +18,23 @@ import { app } from 'electron';
 import { enableAudioSources } from './enable-audio-sources.js';
 
 /**
+ * Ensure a number is even, if odd add 1 to make it even
+ * @param {number} value - The value to make even
+ * @returns {number} Even number
+ */
+function ensureEven(value) {
+  return value % 2 === 0 ? value : value + 1;
+}
+
+/**
  * Calculate dimensions based on the provided resolution and adjustment factor
  * @param {number} width - The base width
  * @param {number} height - The base height
  * @returns {Object} The calculated dimensions
  */
 function calculateDimensions(width, height) {
-  // If aspect ratio is less than 1 (portrait), set heightAdjustmentFactor to 0, otherwise use 55/1080
-  const heightAdjustmentFactor = (width / height < 1) ? 0 : 55 / 1080;
+  // If aspect ratio is less than 1 (portrait), set heightAdjustmentFactor to 0, otherwise use 52/1080
+  const heightAdjustmentFactor = (width / height < 1) ? 0 : 52 / 1080;
 
   // Calculate actual dimensions
   const actualBaseWidth = width;
@@ -39,18 +48,18 @@ function calculateDimensions(width, height) {
   const outputWidthStr = String(actualOutputWidth);
   const outputHeightStr = String(actualOutputHeight);
 
-  // 根据宽高比计算rescaleResStr
+  // 根据宽高比计算rescaleResStr，确保分辨率是偶数
   let rescaleWidth, rescaleHeight;
 
   if (actualBaseWidth >= actualBaseHeight) {
     // 横屏：固定高度为1080，按比例计算宽度
-    rescaleHeight = 1080;
-    rescaleWidth = Math.round(rescaleHeight * (actualBaseWidth / actualBaseHeight));
+    rescaleHeight = ensureEven(1080);
+    rescaleWidth = ensureEven(Math.round(rescaleHeight * (actualBaseWidth / actualBaseHeight)));
 
   } else {
     // 竖屏：固定宽度为1080，按比例计算高度
-    rescaleWidth = 1080;
-    rescaleHeight = Math.round(rescaleWidth * (actualBaseHeight / actualBaseWidth));
+    rescaleWidth = ensureEven(1080);
+    rescaleHeight = ensureEven(Math.round(rescaleWidth * (actualBaseHeight / actualBaseWidth)));
   }
 
   const rescaleResStr = `${rescaleWidth}x${rescaleHeight}`;
@@ -502,7 +511,7 @@ async function manageProfileAndSceneCollection(options) {
                 // 3. 添加文本源 "榜一"
                 console.log('\n3. Adding text source for "榜一"...');
                 try {
-                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一:XXXX');
+                  await addOrUpdateTextSource(obs, currentProgramSceneName, textInputKind, '榜一', '昨日榜一:XX');
                 } catch (textError) {
                   console.warn(`Warning: Failed to add text source "榜一": ${textError.message}`);
                 }
