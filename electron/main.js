@@ -15,6 +15,7 @@ import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
 import { initializePaths, getPath, PathType } from './utils/pathManager.js';
 import { initUpdateChecker } from './update-checker.js';
 import { getSystemInfo } from './utils/hardware-info.js';
+import { initLogger, getLogger, logIPC, logStatusNotification, logAuthNotification } from './utils/logger.js';
 
 // 将回调函数转换为 Promise
 const execAsync = promisify(exec);
@@ -280,9 +281,17 @@ app.whenReady().then(async () => {
   console.log('Initializing application paths...');
   await initializePaths();
 
+  // 初始化日志系统
+  console.log('Initializing logger...');
+  const logger = initLogger();
+  logger.info('Application starting...');
+
   // 初始化更新检查器
-  console.log('Initializing update checker...');
+  logger.info('Initializing update checker...');
   initUpdateChecker();
+
+  // 确保日志系统全局可用
+  global.logger = logger;
 
   // 添加获取应用版本的IPC处理程序
   ipcMain.handle('get-app-version', () => {
@@ -689,14 +698,43 @@ app.whenReady().then(async () => {
 
         // 检查是否有状态消息需要显示给用户（无论是否需要重试）
         if (result.statusMessage) {
-          console.log(`Status message to display: ${result.statusMessage}`);
+          const logger = global.logger || getLogger();
+          logger.info(`Status message to display: ${result.statusMessage}`);
+          logStatusNotification(result.statusMessage, result.currentStatus);
 
-          // 向渲染进程发送状态消息通知
-          if (mainWindow) {
-            mainWindow.webContents.send('status-notification', {
-              message: result.statusMessage,
-              status: result.currentStatus
-            });
+          // 向渲染进程发送状态消息通知，带重试机制
+          if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+            const sendNotificationWithRetry = async (retries = 3) => {
+              for (let i = 0; i < retries; i++) {
+                try {
+                  // 确保窗口仍然存在且未被销毁
+                  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+                    mainWindow.webContents.send('status-notification', {
+                      message: result.statusMessage,
+                      status: result.currentStatus
+                    });
+                    logIPC('status-notification', { message: result.statusMessage, status: result.currentStatus });
+                    logger.info(`Status notification sent successfully (attempt ${i + 1})`);
+                    return; // 成功发送，退出重试循环
+                  } else {
+                    logger.warn(`Main window not available on attempt ${i + 1}`);
+                    break; // 窗口不可用，停止重试
+                  }
+                } catch (error) {
+                  logger.error(`Failed to send status notification (attempt ${i + 1}):`, error);
+                  if (i === retries - 1) {
+                    logger.error('All retry attempts failed for status notification');
+                  } else {
+                    // 等待一小段时间后重试
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                  }
+                }
+              }
+            };
+
+            sendNotificationWithRetry();
+          } else {
+            logger.warn('Main window not available for status notification');
           }
         }
 
@@ -723,14 +761,43 @@ app.whenReady().then(async () => {
 
         // 检查是否有状态消息需要显示给用户（针对成功获取RTMP URL的情况）
         if (result.statusMessage && result.status === 2) {
-          console.log(`Status message to display for status=2: ${result.statusMessage}`);
+          const logger = global.logger || getLogger();
+          logger.info(`Status message to display for status=2: ${result.statusMessage}`);
+          logStatusNotification(result.statusMessage, result.status);
 
-          // 向渲染进程发送状态消息通知
-          if (mainWindow) {
-            mainWindow.webContents.send('status-notification', {
-              message: result.statusMessage,
-              status: result.status
-            });
+          // 向渲染进程发送状态消息通知，带重试机制
+          if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+            const sendNotificationWithRetry = async (retries = 3) => {
+              for (let i = 0; i < retries; i++) {
+                try {
+                  // 确保窗口仍然存在且未被销毁
+                  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+                    mainWindow.webContents.send('status-notification', {
+                      message: result.statusMessage,
+                      status: result.status
+                    });
+                    logIPC('status-notification', { message: result.statusMessage, status: result.status });
+                    logger.info(`Status notification sent successfully for status=2 (attempt ${i + 1})`);
+                    return; // 成功发送，退出重试循环
+                  } else {
+                    logger.warn(`Main window not available on attempt ${i + 1} for status=2`);
+                    break; // 窗口不可用，停止重试
+                  }
+                } catch (error) {
+                  logger.error(`Failed to send status notification for status=2 (attempt ${i + 1}):`, error);
+                  if (i === retries - 1) {
+                    logger.error('All retry attempts failed for status=2 notification');
+                  } else {
+                    // 等待一小段时间后重试
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                  }
+                }
+              }
+            };
+
+            sendNotificationWithRetry();
+          } else {
+            logger.warn('Main window not available for status notification (status=2)');
           }
         }
 
@@ -876,17 +943,28 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('show-auth-notification', async (_, { message }) => {
+    const logger = global.logger || getLogger();
     try {
-      console.log('Showing authentication notification:', message);
+      logger.info('Showing authentication notification:', message);
+      logAuthNotification(message);
 
       // 如果主窗口存在，向渲染进程发送通知消息
-      if (mainWindow) {
-        mainWindow.webContents.send('auth-notification', { message });
+      if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+        try {
+          mainWindow.webContents.send('auth-notification', { message });
+          logIPC('auth-notification', { message });
+          logger.info('Auth notification sent successfully via IPC handler');
+        } catch (sendError) {
+          logger.error('Failed to send auth notification via IPC handler:', sendError);
+          throw sendError;
+        }
+      } else {
+        logger.warn('Main window not available for auth notification via IPC handler');
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Failed to show authentication notification:', error);
+      logger.error('Failed to show authentication notification:', error);
       return { success: false, error: error.message };
     }
   });
@@ -957,6 +1035,8 @@ app.whenReady().then(async () => {
       return { success: false, error: error.message };
     }
   });
+
+
 
   // 在macOS上，点击dock图标时重新创建窗口
   app.on('activate', () => {

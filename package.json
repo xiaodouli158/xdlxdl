@@ -24,6 +24,9 @@
     "appId": "com.xdlwebcast.app",
     "productName": "小斗笠直播助手",
     "executableName": "小斗笠直播助手",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -42,6 +45,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
     "autoprefixer": "^10.4.21",
+    "axios": "^1.7.9",
     "extract-zip": "^2.0.1",
     "form-data": "^4.0.2",
     "fs-extra": "^11.3.0",

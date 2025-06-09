@@ -367,6 +367,30 @@ const HomePage = () => {
             }
 
             if (result.error) {
+              // 检查是否是 cookie 相关错误
+              const errorMessage = result.error;
+              const isCookieError = errorMessage.includes('No cookie data available') ||
+                                   errorMessage.includes('cookie') ||
+                                   errorMessage.includes('Cookie') ||
+                                   errorMessage.includes('登录') ||
+                                   errorMessage.includes('认证失败') ||
+                                   errorMessage.includes('未登录');
+
+              if (isCookieError) {
+                console.log('检测到 cookie 错误，停止获取推流信息并弹出登录窗口');
+                setError('需要登录平台账号才能获取推流信息');
+                setOperationInProgress(false);
+                setIsLoading(false);
+                setAbortController(null);
+
+                // 自动弹出登录窗口
+                setTimeout(() => {
+                  setShowLoginModal(true);
+                }, 1000); // 延迟1秒弹出，让用户看到错误信息
+
+                return false;
+              }
+
               throw new Error(result.error);
             }
 
@@ -412,10 +436,15 @@ const HomePage = () => {
             if (result.needsRetry) {
               console.log(`直播间未准备好，当前状态: ${result.currentStatus}，期望状态: ${result.expectedStatus}`);
 
-              // 不显示状态信息，只在控制台记录
-              console.log(`直播间准备中，当前状态: ${result.currentStatus}，等待状态变为2`);
+              // 显示状态提示给用户
+              if (result.statusMessage) {
+                console.log('显示状态提示:', result.statusMessage);
+                setStatusMessage(result.statusMessage);
+                setStatusType(result.currentStatus === 4 ? 'warning' : 'info');
+                setShowStatusPrompt(true);
+              }
 
-              // 继续重试获取推流信息，但不显示错误消息
+              // 继续重试获取推流信息
               throw new Error('直播间准备中');
             }
 
@@ -642,6 +671,30 @@ const HomePage = () => {
             }
 
             if (result.error) {
+              // 检查是否是 cookie 相关错误
+              const errorMessage = result.error;
+              const isCookieError = errorMessage.includes('No cookie data available') ||
+                                   errorMessage.includes('cookie') ||
+                                   errorMessage.includes('Cookie') ||
+                                   errorMessage.includes('登录') ||
+                                   errorMessage.includes('认证失败') ||
+                                   errorMessage.includes('未登录');
+
+              if (isCookieError) {
+                console.log('检测到 cookie 错误，停止直播并弹出登录窗口');
+                setError('需要登录平台账号才能获取推流信息');
+                setOperationInProgress(false);
+                setIsLoading(false);
+                setAbortController(null);
+
+                // 自动弹出登录窗口
+                setTimeout(() => {
+                  setShowLoginModal(true);
+                }, 1000); // 延迟1秒弹出，让用户看到错误信息
+
+                return false;
+              }
+
               throw new Error(result.error);
             }
 
@@ -990,36 +1043,44 @@ const HomePage = () => {
     }
   }, [platform]); // 当平台变化时重新加载用户信息
 
-  // 监听安全认证通知
+  // 监听安全认证通知和状态通知
   useEffect(() => {
+    let removeAuthListener = null;
+    let removeStatusListener = null;
+
     // 只在Electron环境中添加事件监听
-    if (typeof window !== 'undefined' && window.electron && window.electron.onAuthNotification) {
-      // 添加事件监听器函数
-      const handleAuthNotification = (data) => {
-        console.log('收到安全认证通知:', data);
-        if (data && data.message) {
-          setAuthMessage(data.message);
-          setShowAuthNotification(true);
+    if (typeof window !== 'undefined' && window.electron) {
+      console.log('Setting up notification listeners...');
+
+      // 设置认证通知监听器
+      if (window.electron.onAuthNotification) {
+        const handleAuthNotification = (data) => {
+          console.log('收到安全认证通知:', data);
+
+          if (data && data.message) {
+            console.log('Processing auth notification:', data.message);
+            setAuthMessage(data.message);
+            setShowAuthNotification(true);
+          } else {
+            console.warn('Auth notification data is invalid:', data);
+          }
+        };
+
+        try {
+          removeAuthListener = window.electron.onAuthNotification(handleAuthNotification);
+          console.log('Auth notification listener registered');
+        } catch (error) {
+          console.error('Failed to setup auth notification listener:', error);
         }
-      };
+      }
 
-      // 添加IPC事件监听
-      window.electron.onAuthNotification(handleAuthNotification);
-
-      // 同时保留原有的DOM事件监听
-      const handleDomAuthNotification = (event) => {
-        console.log('收到DOM安全认证通知:', event.detail);
-        if (event.detail && event.detail.message) {
-          setAuthMessage(event.detail.message);
-          setShowAuthNotification(true);
-        }
-      };
-
-      // 监听状态通知
+      // 设置状态通知监听器
       if (window.electron.onStatusNotification) {
         const handleStatusNotification = (data) => {
           console.log('收到状态通知:', data);
+
           if (data && data.message) {
+            console.log('Processing status notification:', data.message, 'status:', data.status);
             setStatusMessage(data.message);
 
             // 根据状态值设置不同的提示类型
@@ -1032,21 +1093,72 @@ const HomePage = () => {
             }
 
             setShowStatusPrompt(true);
+          } else {
+            console.warn('Status notification data is invalid:', data);
           }
         };
 
-        // 添加IPC事件监听
-        window.electron.onStatusNotification(handleStatusNotification);
+        try {
+          removeStatusListener = window.electron.onStatusNotification(handleStatusNotification);
+          console.log('Status notification listener registered');
+        } catch (error) {
+          console.error('Failed to setup status notification listener:', error);
+        }
+      } else {
+        console.warn('window.electron.onStatusNotification is not available');
       }
+
+      // 同时保留原有的DOM事件监听作为备用方案
+      const handleDomAuthNotification = (event) => {
+        console.log('收到DOM安全认证通知:', event.detail);
+        if (event.detail && event.detail.message) {
+          setAuthMessage(event.detail.message);
+          setShowAuthNotification(true);
+        }
+      };
+
+      const handleDomStatusNotification = (event) => {
+        console.log('收到DOM状态通知:', event.detail);
+        if (event.detail && event.detail.message) {
+          setStatusMessage(event.detail.message);
+          setStatusType(event.detail.status === 4 ? 'warning' : 'info');
+          setShowStatusPrompt(true);
+        }
+      };
 
       // 添加DOM事件监听
       window.addEventListener('auth-notification', handleDomAuthNotification);
+      window.addEventListener('status-notification', handleDomStatusNotification);
 
       // 清理函数
       return () => {
+        console.log('Cleaning up notification listeners...');
+
+        // 移除IPC事件监听器
+        if (removeAuthListener && typeof removeAuthListener === 'function') {
+          try {
+            removeAuthListener();
+            console.log('Auth notification listener removed');
+          } catch (error) {
+            console.error('Error removing auth notification listener:', error);
+          }
+        }
+
+        if (removeStatusListener && typeof removeStatusListener === 'function') {
+          try {
+            removeStatusListener();
+            console.log('Status notification listener removed');
+          } catch (error) {
+            console.error('Error removing status notification listener:', error);
+          }
+        }
+
+        // 移除DOM事件监听器
         window.removeEventListener('auth-notification', handleDomAuthNotification);
-        // 注意：IPC事件监听器在Electron中通常不需要手动移除
+        window.removeEventListener('status-notification', handleDomStatusNotification);
       };
+    } else {
+      console.warn('Electron environment not detected, notification listeners not set up');
     }
   }, []);
 
