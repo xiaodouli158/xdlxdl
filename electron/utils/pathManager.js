@@ -6,7 +6,8 @@
  * and installation locations.
  */
 
-import { app } from 'electron';
+import pkg from 'electron';
+const { app } = pkg;
 import path from 'path';
 import fs from 'fs';
 import { promisify } from 'util';
@@ -39,6 +40,12 @@ export const PathType = {
  * @returns {string} The resolved path
  */
 export function getPath(pathType) {
+  // Check if we're in an Electron environment
+  if (!app || typeof app.getPath !== 'function') {
+    console.warn('pathManager: Not in Electron environment, returning empty path');
+    return '';
+  }
+
   // Base paths
   const userData = app.getPath('userData');
   const appPath = app.getAppPath();
@@ -109,6 +116,12 @@ export async function ensureDir(dirPath) {
  */
 export async function initializePaths() {
   try {
+    // Check if we're in an Electron environment
+    if (!app || typeof app.getPath !== 'function') {
+      console.warn('pathManager: Not in Electron environment, skipping path initialization');
+      return false;
+    }
+
     // 打印环境信息，便于调试
     console.log('Application environment:');
     console.log(`- app.isPackaged: ${app.isPackaged}`);

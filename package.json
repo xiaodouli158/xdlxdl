@@ -27,32 +27,8 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "public/icons/**/*",
-      "public/fonts/**/*",
-      "public/images/**/*",
-      "public/xdllogo.ico",
+      "public/**/*",
       "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "public/icons",
-        "to": "public/icons",
-        "filter": ["**/*"]
-      },
-      {
-        "from": "public/fonts",
-        "to": "public/fonts",
-        "filter": ["**/*"]
-      },
-      {
-        "from": "public/images",
-        "to": "public/images",
-        "filter": ["**/*"]
-      },
-      {
-        "from": "public/xdllogo.ico",
-        "to": "public/xdllogo.ico"
-      }
     ],
     "win": {
       "target": ["nsis"],

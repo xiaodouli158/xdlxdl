@@ -1396,7 +1396,7 @@ const HomePage = () => {
                     >
                       <option value="直播伴侣">直播伴侣</option>
                       <option value="手机开播">手机开播</option>
-                      <option value="自动开播">自动开播</option>
+                      {/* <option value="自动开播">自动开播</option> */}
                     </select>
                   </div>
                 )}

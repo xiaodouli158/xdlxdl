@@ -598,52 +598,38 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('get-douyin-api-info', async (_, { token, method }) => {
     try {
-      console.log(`Getting Douyin API info for method: ${method} with token: ${token ? (typeof token === 'string' ? token.substring(0, 5) + '...' : JSON.stringify(token)) : 'none'}`);
+      console.log(`[DOUYIN-API] Getting Douyin API info for method: ${method} with token: ${token ? (typeof token === 'string' ? token.substring(0, 5) + '...' : JSON.stringify(token)) : 'none'}`);
 
       // 导入douyin_rtmp_api模块
       try {
+        console.log(`[DOUYIN-API] Importing douyin_rtmp_api module...`);
         const { main: douyinRtmpApi } = await import('./modules/douyin_rtmp_api.js');
+        console.log(`[DOUYIN-API] Module imported successfully`);
 
         // 根据方法选择模式
         // 手机开播对应phone模式，自动开播对应auto模式
         const mode = method === 'create' ? 'auto' : 'phone';
-        console.log(`Using mode: ${mode} for method: ${method}`);
+        console.log(`[DOUYIN-API] Using mode: ${mode} for method: ${method}`);
 
         // 调用API
+        console.log(`[DOUYIN-API] Calling douyinRtmpApi with mode: ${mode}`);
         const result = await douyinRtmpApi(mode, { handleAuth: true });
 
-        console.log('Douyin RTMP API result:', result);
+        console.log('[DOUYIN-API] Douyin RTMP API result:', result);
 
         // 如果是停止直播，则停止ping/anchor请求
         if (method === 'stop') {
+          console.log(`[DOUYIN-API] Stopping ping/anchor requests...`);
           const { stopPingAnchor } = await import('./modules/douyin_rtmp_api.js');
           const stopped = stopPingAnchor();
-          console.log('Stopped ping/anchor requests:', stopped);
+          console.log('[DOUYIN-API] Stopped ping/anchor requests:', stopped);
           return { success: true, message: '已停止直播状态维持' };
         }
 
-        // 如果是手动维持直播状态
-        if (method === 'maintain' && token) {
-          try {
-            const { startPingAnchor } = await import('./modules/douyin_rtmp_api.js');
-            const { room_id, stream_id, mode } = token;
-
-            if (!room_id || !stream_id) {
-              return { error: '缺少必要的房间ID或流ID参数' };
-            }
-
-            const started = startPingAnchor(room_id, stream_id, mode || 'phone');
-            console.log('Started ping/anchor requests:', started);
-            return {
-              success: true,
-              message: '已开始直播状态维持',
-              room_id,
-              stream_id
-            };
-          } catch (error) {
-            console.error('Error starting ping/anchor requests:', error);
-            return { error: `启动直播状态维持失败: ${error.message}` };
-          }
+        // maintain 方法现在由专用的 maintain-douyin-stream 处理器处理
+        if (method === 'maintain') {
+          console.log(`[DOUYIN-API] Maintain method called, redirecting to dedicated handler`);
+          return { error: '请使用专用的维持直播状态接口' };
         }
 
         // 检查是否需要安全认证
@@ -795,6 +781,53 @@ app.whenReady().then(async () => {
     } catch (error) {
       console.error('Failed to get Bilibili stream info:', error);
       return { error: error.message };
+    }
+  });
+
+  // 维持抖音直播状态的专用处理器
+  ipcMain.handle('maintain-douyin-stream', async (_, { room_id, stream_id, mode }) => {
+    try {
+      console.log(`[MAINTAIN-STREAM] Starting maintenance - Room ID: ${room_id}, Stream ID: ${stream_id}, Mode: ${mode}`);
+
+      // 验证参数
+      if (!room_id || !stream_id) {
+        console.error('[MAINTAIN-STREAM] Missing required parameters');
+        return {
+          success: false,
+          error: '缺少必要的房间ID或流ID参数'
+        };
+      }
+
+      // 导入douyin_rtmp_api模块
+      try {
+        console.log('[MAINTAIN-STREAM] Importing douyin_rtmp_api module...');
+        const { continuouslyMaintainStream } = await import('./modules/douyin_rtmp_api.js');
+        console.log('[MAINTAIN-STREAM] Module imported successfully');
+
+        // 启动维持直播状态
+        console.log('[MAINTAIN-STREAM] Starting continuous maintenance...');
+        const intervalId = await continuouslyMaintainStream(room_id, stream_id, mode, 30000);
+
+        console.log('[MAINTAIN-STREAM] Stream maintenance started successfully with interval ID:', intervalId);
+
+        return {
+          success: true,
+          message: '直播状态维持已启动',
+          intervalId: intervalId
+        };
+      } catch (error) {
+        console.error('[MAINTAIN-STREAM] Error importing or running douyin_rtmp_api for maintenance:', error);
+        return {
+          success: false,
+          error: `API模块错误: ${error.message}`
+        };
+      }
+    } catch (error) {
+      console.error('[MAINTAIN-STREAM] Failed to maintain Douyin stream:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   });
 

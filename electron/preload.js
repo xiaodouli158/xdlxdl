@@ -32,9 +32,10 @@ contextBridge.exposeInMainWorld('electron', {
   getDouyinCompanionInfo: () => ipcRenderer.invoke('get-douyin-companion-info'),
   getDouyinApiInfo: (token, method) => ipcRenderer.invoke('get-douyin-api-info', { token, method }),
   stopDouyinPingAnchor: () => ipcRenderer.invoke('get-douyin-api-info', { token: null, method: 'stop' }),
-  maintainDouyinStream: (room_id, stream_id, mode) => ipcRenderer.invoke('get-douyin-api-info', {
-    token: { room_id, stream_id, mode },
-    method: 'maintain'
+  maintainDouyinStream: (room_id, stream_id, mode) => ipcRenderer.invoke('maintain-douyin-stream', {
+    room_id,
+    stream_id,
+    mode
   }),
   getBilibiliStreamInfo: (token) => ipcRenderer.invoke('get-bilibili-stream-info', { token }),
 
