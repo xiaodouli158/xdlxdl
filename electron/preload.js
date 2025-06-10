@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('electron', {
   loginDouyinCompanion: () => ipcRenderer.invoke('login-douyin-companion'),
   loginBilibili: () => ipcRenderer.invoke('login-bilibili'),
 
+  // 用户数据获取功能
+  getDouyinUserStats: (options) => ipcRenderer.invoke('get-douyin-user-stats', options),
+
   // 安全认证相关功能
   openAuthUrl: (url) => ipcRenderer.invoke('open-auth-url', { url }),
   showAuthNotification: (message) => ipcRenderer.invoke('show-auth-notification', { message }),

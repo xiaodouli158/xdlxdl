@@ -76,8 +76,8 @@ export function getPath(pathType) {
     // User data paths
     [PathType.USER_DATA]: userData,
     [PathType.WEBSTORE]: webStoreDir,
-    // 将 DOUYIN_COOKIES 放在用户数据目录中，确保在生产环境中有写入权限
-    [PathType.DOUYIN_COOKIES]: path.join(userData, 'douyin_cookies.txt'),
+    // 将 DOUYIN_COOKIES 保存到用户数据目录的 Network 目录中，文件名为 Network_cookies
+    [PathType.DOUYIN_COOKIES]: path.join(userData, 'Network', 'Network_cookies'),
 
     // Application paths
     [PathType.APP_DATA]: appPath,
@@ -141,7 +141,7 @@ export async function initializePaths() {
       getPath(PathType.WEBSTORE),
       getPath(PathType.TEMP),
       getPath(PathType.LOGS),
-      path.dirname(getPath(PathType.DOUYIN_COOKIES))
+      path.dirname(getPath(PathType.DOUYIN_COOKIES)) // Network 目录
     ];
 
     // Create all directories

@@ -12,6 +12,7 @@ import { loginDouyinCompanion } from './modules/douyinCompanionLogin.js';
 import { registerOBSWebSocketHandlers } from './modules/obsWebSocketHandlers.js';
 import { registerOBSConfigHandlers } from './modules/obsConfigHandlers.js';
 import { executeCtrlShiftL } from './modules/keyboard_shortcut.js';
+import { getdouyinUserStats } from './modules/douyin_user_stats.js';
 import { initializePaths, getPath, PathType } from './utils/pathManager.js';
 import { initUpdateChecker } from './update-checker.js';
 import { getSystemInfo } from './utils/hardware-info.js';
@@ -848,6 +849,50 @@ app.whenReady().then(async () => {
     } catch (error) {
       console.error('Failed to get Bilibili stream info:', error);
       return { error: error.message };
+    }
+  });
+
+  // 获取抖音用户统计信息
+  ipcMain.handle('get-douyin-user-stats', async (_, options = {}) => {
+    try {
+      console.log('[DOUYIN-USER-STATS] Getting Douyin user stats...');
+      const result = await getdouyinUserStats(options);
+
+      if (result) {
+        console.log('[DOUYIN-USER-STATS] Successfully retrieved user stats:', {
+          nickname: result.nickname,
+          follower_count: result.follower_count,
+          source: result.source
+        });
+        return { success: true, data: result };
+      } else {
+        console.log('[DOUYIN-USER-STATS] No user stats data available');
+        return { success: false, error: 'No user stats data available' };
+      }
+    } catch (error) {
+      console.error('[DOUYIN-USER-STATS] Failed to get Douyin user stats:', error.message);
+
+      // 根据错误类型返回不同的错误代码
+      let errorCode = 'UNKNOWN_ERROR';
+      if (error.message.includes("Cookie文件不存在")) {
+        errorCode = 'COOKIE_FILE_NOT_FOUND';
+      } else if (error.message.includes("Cookie文件内容为空")) {
+        errorCode = 'COOKIE_FILE_EMPTY';
+      } else if (error.message.includes("Cookie内容异常")) {
+        errorCode = 'COOKIE_CONTENT_INVALID';
+      } else if (error.message.includes("无法读取Cookie文件")) {
+        errorCode = 'COOKIE_FILE_READ_ERROR';
+      } else if (error.message.includes("无法获取用户统计信息")) {
+        errorCode = 'API_REQUEST_FAILED';
+      } else if (error.message.includes("网络连接")) {
+        errorCode = 'NETWORK_ERROR';
+      }
+
+      return {
+        success: false,
+        error: error.message,
+        errorCode: errorCode
+      };
     }
   });
 

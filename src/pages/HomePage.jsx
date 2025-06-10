@@ -6,7 +6,7 @@ import StatusPrompt from '../components/StatusPrompt';
 import WorkCard from '../components/WorkCard';
 import { useNavigate } from 'react-router-dom';
 import { loginWithDouyinWeb, loginWithDouyinCompanion } from '../utils/douyinLoginUtils';
-import { loadPlatformUserData, clearPlatformUserData } from '../utils/platformLoginUtils';
+import { loadPlatformUserData, clearPlatformUserData, refreshPlatformUserData } from '../utils/platformLoginUtils';
 import apiService from '../services/apiService';
 // import { useStreaming } from '../context/StreamingContext';
 // import { workspaceStreamInfo, configureAndStartOBS } from '../utils/obsUtils';
@@ -285,18 +285,25 @@ const HomePage = () => {
   // 处理用户选择变更并保存到本地存储
   const toggleMode = () => setAutoMode(!autoMode);
 
-  const handlePlatformChange = (newPlatform) => {
+  const handlePlatformChange = async (newPlatform) => {
     setPlatform(newPlatform);
     // 保存到本地存储
     localStorage.setItem('selectedPlatform', newPlatform);
 
     // 根据新选择的平台加载用户信息
-    const platformUserData = loadPlatformUserData(newPlatform);
-    if (platformUserData) {
-      setIsLoggedIn(true);
-      setUserInfo(platformUserData.user);
-    } else {
-      // 如果没有找到该平台的用户信息，则设置为未登录状态
+    try {
+      const platformUserData = await loadPlatformUserData(newPlatform);
+      if (platformUserData && platformUserData.user && platformUserData.user.nickname) {
+        setIsLoggedIn(true);
+        setUserInfo(platformUserData.user);
+      } else {
+        // 如果没有找到该平台的用户信息，则设置为未登录状态
+        console.log('未找到有效的平台用户数据');
+        setIsLoggedIn(false);
+        setUserInfo(null);
+      }
+    } catch (error) {
+      console.error(`Failed to load platform user data for ${newPlatform}:`, error);
       setIsLoggedIn(false);
       setUserInfo(null);
     }
@@ -1033,14 +1040,25 @@ const HomePage = () => {
   // 检查是否已登录
   useEffect(() => {
     // 根据当前选择的平台从本地存储中加载用户数据
-    const userData = loadPlatformUserData(platform);
-    if (userData) {
-      setIsLoggedIn(true);
-      setUserInfo(userData.user);
-    } else {
-      setIsLoggedIn(false);
-      setUserInfo(null);
-    }
+    const loadUserData = async () => {
+      try {
+        const userData = await loadPlatformUserData(platform);
+        if (userData && userData.user && userData.user.nickname) {
+          setIsLoggedIn(true);
+          setUserInfo(userData.user);
+        } else {
+          console.log('未找到有效的用户数据');
+          setIsLoggedIn(false);
+          setUserInfo(null);
+        }
+      } catch (error) {
+        console.error(`Failed to load user data for platform ${platform}:`, error);
+        setIsLoggedIn(false);
+        setUserInfo(null);
+      }
+    };
+
+    loadUserData();
   }, [platform]); // 当平台变化时重新加载用户信息
 
   // 监听安全认证通知和状态通知
@@ -1162,18 +1180,7 @@ const HomePage = () => {
     }
   }, []);
 
-  // 初始化时根据当前选择的平台加载用户信息
-  useEffect(() => {
-    // 根据当前选择的平台从本地存储中加载用户数据
-    const userData = loadPlatformUserData(platform);
-    if (userData) {
-      setIsLoggedIn(true);
-      setUserInfo(userData.user);
-    } else {
-      setIsLoggedIn(false);
-      setUserInfo(null);
-    }
-  }, [platform]); // 当平台变化时重新加载用户信息
+
 
   // 广告轮播逻辑
   useEffect(() => {
@@ -1205,8 +1212,15 @@ const HomePage = () => {
       const result = await loginWithDouyinWeb();
 
       if (result.success) {
-        setIsLoggedIn(true);
-        setUserInfo(result.user);
+        // 登录成功后，强制刷新用户数据（跳过缓存）
+        const userData = await refreshPlatformUserData(platform);
+        if (userData && userData.user && userData.user.nickname) {
+          setIsLoggedIn(true);
+          setUserInfo(userData.user);
+        } else {
+          console.log('登录成功但无法获取有效的用户信息');
+          setError('登录成功但无法获取用户信息，请重试');
+        }
       } else {
         setError(result.error || '登录失败');
       }
@@ -1235,8 +1249,15 @@ const HomePage = () => {
       const result = await loginWithDouyinCompanion();
 
       if (result.success) {
-        setIsLoggedIn(true);
-        setUserInfo(result.user);
+        // 登录成功后，强制刷新用户数据（跳过缓存）
+        const userData = await refreshPlatformUserData(platform);
+        if (userData && userData.user && userData.user.nickname) {
+          setIsLoggedIn(true);
+          setUserInfo(userData.user);
+        } else {
+          console.log('登录成功但无法获取有效的用户信息');
+          setError('登录成功但无法获取用户信息，请重试');
+        }
       } else {
         setError(result.error || '登录失败');
       }

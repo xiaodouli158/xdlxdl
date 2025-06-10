@@ -20,8 +20,7 @@ export const loginWithDouyinWeb = async () => {
 
     if (result.success) {
       console.log('抖音网页登录成功');
-      // Save user data to localStorage
-      saveDouyinUserData(result.user, result.cookies, result.cookieString);
+      // 注意：用户数据现在通过 getdouyinUserStats() 动态获取，不再保存到 localStorage
       return result;
     } else {
       console.log('抖音网页登录失败:', result.error);
@@ -50,8 +49,7 @@ export const loginWithDouyinCompanion = async () => {
 
     if (result.success) {
       console.log('直播伴侣登录成功');
-      // Save user data to localStorage
-      saveDouyinUserData(result.user, result.cookies, result.cookieString);
+      // 注意：用户数据现在通过 getdouyinUserStats() 动态获取，不再保存到 localStorage
       return result;
     } else {
       console.log('直播伴侣登录失败:', result.error);
@@ -63,48 +61,12 @@ export const loginWithDouyinCompanion = async () => {
   }
 };
 
-/**
- * Save Douyin user data to localStorage
- * @param {Object} user User information
- * @param {Array|Object} cookies Cookie array or object with cookieString
- * @param {string} [cookieString] Optional cookie string if already available
- */
-const saveDouyinUserData = (user, cookies, cookieString) => {
-  try {
-    // 处理cookies，确保我们保存的是一个标准格式
-    let cookieData = cookies;
-
-    // 如果cookies是数组，则转换为字符串格式以便于HTTP请求使用
-    if (Array.isArray(cookies)) {
-      // 创建一个webcookies变量，用于HTTP请求
-      const webcookies = cookieString || cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-
-      // 保存原始cookie数组和字符串格式
-      cookieData = {
-        cookieArray: cookies,
-        cookieString: webcookies
-      };
-    } else if (typeof cookies === 'object' && cookies.cookieString) {
-      // 如果cookies对象已经包含cookieString，直接使用
-      cookieData = cookies;
-    }
-
-    const userData = {
-      user,
-      cookies: cookieData,
-      platform: '抖音',
-      loginTime: new Date().toISOString()
-    };
-
-    localStorage.setItem('douyinAuth', JSON.stringify(userData));
-    console.log('已保存抖音用户数据到本地存储');
-  } catch (error) {
-    console.error('Failed to save Douyin user data:', error);
-  }
-};
+// 注意：saveDouyinUserData 函数已移除
+// 用户数据现在通过 getdouyinUserStats() 动态获取，不再保存到 localStorage
 
 /**
- * Load Douyin user data from localStorage
+ * Load Douyin user data from localStorage (仅作为回退机制)
+ * 注意：主要的用户数据现在通过 getdouyinUserStats() 动态获取
  * @returns {Object|null} User data or null if not found
  */
 export const loadDouyinUserData = () => {

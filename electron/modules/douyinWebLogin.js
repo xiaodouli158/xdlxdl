@@ -70,7 +70,7 @@ async function clearAllBrowserData() {
 }
 
 /**
- * 将cookies保存到文件
+ * 将cookies保存到文件（全新保存）
  * @param {Array} cookies Cookie数组
  * @returns {Promise<boolean>} 保存结果
  */
@@ -79,9 +79,9 @@ async function saveCookiesToFile(cookies) {
     // 将cookies转换为字符串格式
     const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
 
-    // 保存到文件
+    // 直接覆盖保存到文件
     fs.writeFileSync(cookieFilePath, cookieString, 'utf8');
-    console.log(`已保存 ${cookies.length} 个Cookie到 ${cookieFilePath}`);
+    console.log(`已保存 ${cookies.length} 个网页Cookie到 ${cookieFilePath}`);
     return true;
   } catch (error) {
     console.error(`保存Cookie文件失败: ${error.message}`);
@@ -184,7 +184,7 @@ export function loginDouyinWeb() {
               const userInfo = await loginWindow.webContents.executeJavaScript(`
                 (function() {
                   try {
-                    // 尝试获取用户信息 - 根据实际HTML结构
+                    // 尝试获取用户昵称
                     let nickname = '抖音用户';
                     // 尝试多个可能的选择器
                     if (document.querySelector('h1.a34DMvQe')) {
@@ -209,100 +209,31 @@ export function loginDouyinWeb() {
                       }
                     }
 
-                    // 尝试获取关注数、粉丝数、获赞数
-                    // 首先尝试使用data-e2e属性
-                    let following_count = 0;
-                    let follower_count = 0;
-                    let like_Count = 0;
-                    let likeText = '0';
+                    // 判断是否获取到真实用户数据 - 只需要昵称不是默认值且有头像
+                    const hasRealUserData = nickname !== '抖音用户' && avatar_url !== null;
 
-                    // 尝试获取关注数
-                    const followEl = document.querySelector('[data-e2e="user-info-follow"] .sCnO6dhe');
-                    if (followEl) {
-                      following_count = parseInt(followEl.innerText.replace(/[^0-9]/g, '')) || 0;
-                    }
-
-                    // 尝试获取粉丝数
-                    const fansEl = document.querySelector('[data-e2e="user-info-fans"] .sCnO6dhe');
-                    if (fansEl) {
-                      follower_count = parseInt(fansEl.innerText.replace(/[^0-9]/g, '')) || 0;
-                    }
-
-                    // 尝试获取获赞数
-                    const likeEl = document.querySelector('[data-e2e="user-info-like"] .sCnO6dhe');
-                    if (likeEl) {
-                      likeText = likeEl.innerText.trim();
-                    }
-
-                    // 如果上面的方法失败，尝试使用类选择器
-                    if (following_count === 0 && follower_count === 0 && likeText === '0') {
-                      // 获取所有的计数元素
-                      const allCountEls = document.querySelectorAll('.sCnO6dhe');
-                      if (allCountEls.length >= 3) {
-                        following_count = parseInt(allCountEls[0].innerText.replace(/[^0-9]/g, '')) || 0;
-                        follower_count = parseInt(allCountEls[1].innerText.replace(/[^0-9]/g, '')) || 0;
-                        likeText = allCountEls[2].innerText.trim();
-                      }
-                    }
-
-                    // 处理带单位的数字，如"3.5万"
-                    if (likeText.includes('万')) { // 处理万单位
-                      like_Count = parseFloat(likeText.replace('万', '')) * 10000;
-                    } else if (likeText.includes('亿')) { // 处理亿单位
-                      like_Count = parseFloat(likeText.replace('亿', '')) * 100000000;
-                    } else {
-                      like_Count = parseInt(likeText.replace(/[^0-9]/g, '')) || 0;
-                    }
-
-                    // 检查是否获取到了关键数据 - 只要有昵称就认为有数据
-                    // 打印原始值，便于调试
-                    console.log('抖音网页原始数据:', {
+                    console.log('抖音用户信息检查:', {
                       nickname,
                       avatar_url,
-                      following_count,
-                      follower_count,
-                      like_Count
-                    });
-
-                    // 根据实际获取的数据判断是否有真实数据 - 昵称不是默认的"抖音用户"且有头像且有粉丝数
-                    const hasData = nickname !== '抖音用户' &&
-                                   avatar_url !== null &&
-                                   follower_count !== undefined &&
-                                   follower_count !== null;
-
-                    console.log('Extracted user info:', {
-                      nickname,
-                      avatar_url,
-                      following_count,
-                      follower_count,
-                      like_Count,
-                      hasData
+                      hasRealUserData
                     });
 
                     return {
                       nickname,
                       avatar_url,
-                      following_count,
-                      follower_count,
-                      like_Count,
-                      hasData
+                      hasRealUserData
                     };
                   } catch (e) {
                     console.error('Error extracting user info:', e);
-                    return { hasData: false };
+                    return { hasRealUserData: false };
                   }
                 })();
               `);
 
               console.log(`Attempt ${retryCount}/${maxRetries} - User info extracted:`, userInfo);
 
-              // 判断是否获取到真实用户数据 - 昵称不是默认的"抖音用户"且有头像且有粉丝数
-              const hasRealUserData = userInfo &&
-                                     userInfo.nickname &&
-                                     userInfo.nickname !== '抖音用户' &&
-                                     userInfo.avatar_url &&
-                                     userInfo.follower_count !== undefined &&
-                                     userInfo.follower_count !== null;
+              // 判断是否获取到真实用户数据 - 只需要昵称不是默认值且有头像
+              const hasRealUserData = userInfo && userInfo.hasRealUserData;
 
               // 打印详细的判断条件，便于调试
               console.log('登录判断条件:', {
@@ -310,9 +241,6 @@ export function loginDouyinWeb() {
                 '用户数据存在': !!userInfo,
                 '昵称': userInfo ? userInfo.nickname : null,
                 '头像': userInfo ? userInfo.avatar_url : null,
-                '关注数': userInfo ? userInfo.following_count : null,
-                '粉丝数': userInfo ? userInfo.follower_count : null,
-                '获赞数': userInfo ? userInfo.like_Count : null,
                 '是否真实数据': hasRealUserData
               });
 
@@ -339,7 +267,7 @@ export function loginDouyinWeb() {
                   isCheckingLogin = false;
                 }
 
-                // 构建用户数据 - 只使用实际获取到的数据
+                // 构建用户数据 - 只使用昵称和头像
                 let userId = '';
                 const sessionIdCookie = cookies.find(cookie => cookie.name === 'sessionid');
                 if (sessionIdCookie) {
@@ -351,10 +279,7 @@ export function loginDouyinWeb() {
                 const userData = {
                   id: userId,
                   nickname: userInfo.nickname,
-                  avatar_url: userInfo.avatar_url,
-                  following_count: userInfo.following_count || 0,
-                  follower_count: userInfo.follower_count || 0,
-                  like_Count: userInfo.like_Count || 0
+                  avatar_url: userInfo.avatar_url
                 };
 
                 console.log('Final user data:', userData);
@@ -374,19 +299,6 @@ export function loginDouyinWeb() {
                   cookieString: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
                 });
                 return;
-              }
-
-              // 如果没有获取到真实用户数据，尝试刷新页面
-              if (retryCount % 10 === 0 && !loginWindow.hasTriedRefresh) {
-                console.log(`尝试刷新页面获取用户数据... (尝试次数: ${retryCount})`);
-                loginWindow.hasTriedRefresh = true;
-
-                try {
-                  await loginWindow.loadURL('https://www.douyin.com/user/self');
-                  console.log('已刷新页面，等待加载用户资料...');
-                } catch (refreshError) {
-                  console.error('刷新页面失败:', refreshError);
-                }
               }
 
               // 继续等待获取用户数据

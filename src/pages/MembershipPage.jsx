@@ -5,12 +5,14 @@ import { User, CreditCard, MessageSquare, Settings } from 'lucide-react';
 function MembershipPage() {
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('');
-  
-  // 模拟用户数据
+
+  // 软件会员信息（这里应该是软件本身的用户系统，不是抖音用户）
   const currentUser = {
-    username: 'test',
-    avatar: null,
-    vipDaysLeft: 30
+    username: "用户001",
+    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=128&q=80",
+    vipLevel: "高级会员",
+    vipDaysLeft: 15,
+    joinDate: "2024-01-15"
   };
   
   const handleRenew = () => {
@@ -47,9 +49,9 @@ function MembershipPage() {
             </h2>
             
             <div className="flex items-center mb-2">
-              <img 
-                src={currentUser.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=128&q=80"} 
-                alt="用户头像" 
+              <img
+                src={currentUser.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=128&q=80"}
+                alt="用户头像"
                 className="w-20 h-20 rounded-full mr-2"
               />
               <div>
@@ -68,7 +70,7 @@ function MembershipPage() {
                 <span className="text-gray-400 text-xs">剩余: {currentUser.vipDaysLeft}天</span>
               </div>
               <div className="w-full h-1.5 bg-gray-600 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-yellow-500 rounded-full"
                   style={{ width: `${(currentUser.vipDaysLeft / 30) * 100}%` }}
                 />
