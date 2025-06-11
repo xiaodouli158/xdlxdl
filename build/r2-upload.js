@@ -58,6 +58,20 @@ if (!fs.existsSync(installerPath)) {
   // Continue execution without the installer file
 }
 
+// Get file size if installer exists
+let fileSize = null;
+if (fs.existsSync(installerPath)) {
+  try {
+    const stats = fs.statSync(installerPath);
+    const fileSizeBytes = stats.size;
+    const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(2);
+    fileSize = `${fileSizeMB} MB`;
+    console.log(`Installer file size: ${fileSize} (${fileSizeBytes} bytes)`);
+  } catch (error) {
+    console.warn(`Could not get file size: ${error.message}`);
+  }
+}
+
 // Create version info file
 const versionInfo = {
   version,
@@ -65,6 +79,7 @@ const versionInfo = {
   releaseDate: new Date().toISOString(),
   downloadUrl: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/${installerFileName}`,
   fileName: installerFileName,
+  ...(fileSize && { fileSize }), // Only add fileSize if it exists
   sha512: '', // We could add a hash here if needed
 };
 

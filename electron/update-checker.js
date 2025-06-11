@@ -24,7 +24,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60 * 6; // Check every 6 hours
 
 // Configuration for Cloudflare R2 (Primary Server)
-const R2_ACCOUNT_ID = '84794ee73142290fa69ac64ae8fc7beea';
+const R2_ACCOUNT_ID = '84794ee73142290fa69ac64ae8fc7bee';
 const R2_ACCESS_KEY_ID = '50ff0db943697b84c9386513d45fabb9';
 const R2_SECRET_ACCESS_KEY = '3a33b9b6f3d8bcc1a05aea230d447af20db97f3cbe3776f1aecfbd8c39ccf579';
 const R2_BUCKET_NAME = 'xiaodouliupdates';

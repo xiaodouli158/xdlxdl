@@ -10,7 +10,8 @@
     "electron:dev": "concurrently -k \"vite --port 5174\" \"wait-on http://localhost:5174 && electron .\"",
     "electron:build": "node build/check-resources.js && vite build && node build/build.js && node build/verify-build.js",
     "check-resources": "node build/check-resources.js",
-    "verify-build": "node build/verify-build.js"
+    "verify-build": "node build/verify-build.js",
+    "generate-version": "node build/generate-latest-yml.js"
   },
   "keywords": [
     "electron",

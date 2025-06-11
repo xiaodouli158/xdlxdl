@@ -1,5 +1,6 @@
 import { build, Platform } from 'electron-builder';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getIconConfig } from './icon-config.js';
 
@@ -105,6 +106,59 @@ try {
 // Log build start
 console.log('Starting Electron build with configuration:', JSON.stringify(config, null, 2));
 
+// Function to generate latest.yml file
+function generateVersionFile() {
+  console.log('Generating latest.yml version file...');
+
+  // Load package.json to get version info
+  const packageJsonPath = path.join(__dirname, '..', 'package.json');
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const { version } = packageJson;
+  const productName = config.productName || "小斗笠直播助手";
+
+  // Path to the installer file
+  const installerFileName = `小斗笠直播助手-Setup-${version}.exe`;
+  const outputDirPath = path.join(__dirname, '..', config.directories.output);
+  const installerPath = path.join(outputDirPath, installerFileName);
+
+  // Get file size if installer exists
+  let fileSize = null;
+  if (fs.existsSync(installerPath)) {
+    try {
+      const stats = fs.statSync(installerPath);
+      const fileSizeBytes = stats.size;
+      const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(2);
+      fileSize = `${fileSizeMB} MB`;
+      console.log(`Installer file size: ${fileSize} (${fileSizeBytes} bytes)`);
+    } catch (error) {
+      console.warn(`Could not get file size: ${error.message}`);
+    }
+  } else {
+    console.warn(`Installer file not found at: ${installerPath}`);
+  }
+
+  // Create version info file
+  const versionInfo = {
+    version,
+    productName,
+    releaseDate: new Date().toISOString(),
+    downloadUrl: `https://84794ee73142290fa69ac64ae8fc7bee.r2.cloudflarestorage.com/xiaodouliupdates/${installerFileName}`,
+    fileName: installerFileName,
+    ...(fileSize && { fileSize }), // Only add fileSize if it exists
+    sha512: '', // We could add a hash here if needed
+  };
+
+  const versionInfoPath = path.join(outputDirPath, 'latest.yml');
+  try {
+    fs.writeFileSync(versionInfoPath, JSON.stringify(versionInfo, null, 2));
+    console.log(`Successfully generated latest.yml at: ${versionInfoPath}`);
+    console.log('Version info content:');
+    console.log(JSON.stringify(versionInfo, null, 2));
+  } catch (error) {
+    console.error(`Error writing version info file: ${error.message}`);
+  }
+}
+
 // Build the app
 build({
   targets: Platform.WINDOWS.createTarget(),
@@ -113,6 +167,9 @@ build({
 .then(() => {
   console.log('Build completed successfully!');
   console.log('Build output directory: ' + config.directories.output);
+
+  // Generate version file after successful build
+  generateVersionFile();
 })
 .catch((error) => {
   console.error('Error during build:', error);
