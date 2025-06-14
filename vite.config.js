@@ -27,6 +27,30 @@ export default defineConfig({
             console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
           });
         },
+      },
+      '/dylive': {
+        target: 'https://live.douyin.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/dylive/, ''),
+        configure: (proxy, _options) => {
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            // 设置必要的请求头
+            proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36');
+            proxyReq.setHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8');
+            proxyReq.setHeader('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8');
+            proxyReq.setHeader('Accept-Encoding', 'gzip, deflate, br');
+            proxyReq.setHeader('Connection', 'keep-alive');
+            proxyReq.setHeader('Upgrade-Insecure-Requests', '1');
+          });
+        },
+      },
+      '/socket': {
+        target: 'wss://webcast5-ws-web-lf.douyin.com',
+        changeOrigin: true,
+        secure: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/socket/, ''),
       }
     }
   }

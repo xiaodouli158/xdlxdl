@@ -1,31 +1,47 @@
-// 使用 CommonJS 语法的 preload 脚本
-const { contextBridge, ipcRenderer } = require('electron');
+// 测试 preload 脚本
+console.log('=== PRELOAD SCRIPT STARTING ===');
 
-// 暴露API到渲染进程
+try {
+  const { contextBridge, ipcRenderer } = require('electron');
+  console.log('Electron modules loaded successfully');
+
+  console.log('About to expose electron API...');
+
 contextBridge.exposeInMainWorld('electron', {
-  // 窗口控制函数
+  // 版本检测功能
+  getOBSVersion: () => ipcRenderer.invoke('get-obs-version'),
+  getCompanionVersion: () => ipcRenderer.invoke('get-companion-version'),
+
+  // 窗口控制功能
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   maximizeWindow: () => ipcRenderer.send('maximize-window'),
   closeWindow: () => ipcRenderer.send('close-window'),
 
-  // OBS 相关功能
-  getOBSVersion: () => ipcRenderer.invoke('get-obs-version'),
-  getCompanionVersion: () => ipcRenderer.invoke('get-companion-version'),
-  connectToOBS: (address, password) => ipcRenderer.invoke('connect-to-obs', { address, password }),
+  // 应用信息
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getIconPath: () => ipcRenderer.invoke('get-icon-path'),
+
+  // 系统硬件信息
+  getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+
+  // OBS配置相关功能
+  oneClickConfigureObs: (options) => ipcRenderer.invoke('one-click-configure-obs', options),
+  configureObsProfile: (options) => ipcRenderer.invoke('configure-obs-profile', options),
+  installFonts: () => ipcRenderer.invoke('install-fonts'),
+
+  // OBS WebSocket相关功能
   ensureOBSWebSocketEnabled: () => ipcRenderer.invoke('ensure-obs-websocket-enabled'),
   setOBSStreamSettings: (streamUrl, streamKey) => ipcRenderer.invoke('set-obs-stream-settings', { streamUrl, streamKey }),
   startOBSStreaming: () => ipcRenderer.invoke('start-obs-streaming'),
   stopOBSStreaming: () => ipcRenderer.invoke('stop-obs-streaming'),
+  connectToOBS: (address, password) => ipcRenderer.invoke('connect-to-obs', { address, password }),
 
-  // OBS 配置相关功能
+  // 更多OBS配置功能
   checkInstallFonts: () => ipcRenderer.invoke('check-install-fonts'),
-  installFonts: () => ipcRenderer.invoke('install-fonts'),
   restartObs: () => ipcRenderer.invoke('restart-obs'),
   connectToObs: () => ipcRenderer.invoke('connect-to-obs'),
-  configureObsProfile: (options) => ipcRenderer.invoke('configure-obs-profile', options),
   addObsAudioSources: () => ipcRenderer.invoke('add-obs-audio-sources'),
   addObsVideoDevice: () => ipcRenderer.invoke('add-obs-video-device'),
-  oneClickConfigureObs: (options) => ipcRenderer.invoke('one-click-configure-obs', options),
   configureObsUnified: (options) => ipcRenderer.invoke('configure-obs-unified', options),
 
   // 直播平台相关功能
@@ -56,13 +72,6 @@ contextBridge.exposeInMainWorld('electron', {
 
   // 更新相关功能
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-
-  // 应用信息
-  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  getIconPath: () => ipcRenderer.invoke('get-icon-path'),
-
-  // 系统硬件信息
-  getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
 
   // 外部链接
   openExternal: (url) => ipcRenderer.invoke('open-external', { url }),
@@ -140,6 +149,15 @@ contextBridge.exposeInMainWorld('electron', {
       }));
     }
   },
+  });
+
+  console.log('Electron API exposed successfully!');
+
+} catch (error) {
+  console.error('Error in preload script:', error);
+}
+
+console.log('Preload script completed successfully');
 
 
-});
+

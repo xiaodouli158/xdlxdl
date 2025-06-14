@@ -7,6 +7,7 @@ import MorePage from './pages/MorePage';
 import ObsConfigPage from './pages/ObsConfigPage';
 import AudioSettingsPage from './pages/AudioSettingsPage';
 import MembershipPage from './pages/MembershipPage';
+import DanmuPage from './pages/DanmuPage';
 import MainLayout from './layouts/MainLayout';
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="obs-config" element={<ObsConfigPage />} />
         <Route path="audio-settings" element={<AudioSettingsPage />} />
         <Route path="membership" element={<MembershipPage />} />
+        <Route path="danmu" element={<DanmuPage />} />
       </Route>
     </Routes>
   );

@@ -179,6 +179,8 @@ function createWindow() {
         nodeIntegration: false, // 关闭 Node 集成
         contextIsolation: true, // 启用上下文隔离
         preload: path.join(__dirname, 'preload.js'), // 预加载脚本
+        webSecurity: false, // 禁用网络安全策略以允许跨域请求
+        allowRunningInsecureContent: true, // 允许运行不安全内容
       },
       resizable: false,
       frame: false, // 移除默认窗口边框
@@ -215,8 +217,8 @@ function createWindow() {
         return false;
       };
 
-      // 尝试端口 5174 和 5175
-      tryLoadURL([5174, 5175]).then(success => {
+      // 尝试端口 5176 和 5175
+      tryLoadURL([5176, 5175]).then(success => {
         if (!success) {
           console.error('无法加载任何开发服务器 URL');
         }
@@ -270,6 +272,13 @@ function createWindow() {
     });
 
     console.log('Window created successfully');
+    console.log('Preload script path:', path.join(__dirname, 'preload.js'));
+    console.log('Preload script exists:', fs.existsSync(path.join(__dirname, 'preload.js')));
+
+    // 监听渲染进程的console输出
+    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+      console.log(`[RENDERER] ${message}`);
+    });
   } catch (error) {
     console.error('Error creating window:', error);
   }
@@ -278,6 +287,55 @@ function createWindow() {
 
 // 应用准备就绪后创建窗口
 app.whenReady().then(async () => {
+  // 配置会话以允许弹幕连接
+  const ses = session.defaultSession;
+
+  // 设置权限处理
+  ses.setPermissionRequestHandler((webContents, permission, callback) => {
+    console.log('Permission requested:', permission);
+    callback(true); // 允许所有权限请求
+  });
+
+  // 设置证书验证处理（允许自签名证书）
+  ses.setCertificateVerifyProc((request, callback) => {
+    callback(0); // 0 表示信任证书
+  });
+
+  // 修改请求头以避免CORS问题
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
+    const { requestHeaders } = details;
+
+    // 为抖音直播间请求添加必要的请求头
+    if (details.url.includes('douyin.com') || details.url.includes('douyincdn.com')) {
+      requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
+      requestHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8';
+      requestHeaders['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8';
+      requestHeaders['Accept-Encoding'] = 'gzip, deflate, br';
+      requestHeaders['Connection'] = 'keep-alive';
+      requestHeaders['Upgrade-Insecure-Requests'] = '1';
+
+      // 移除可能导致问题的请求头
+      delete requestHeaders['Origin'];
+      delete requestHeaders['Referer'];
+    }
+
+    callback({ requestHeaders });
+  });
+
+  // 处理响应头以允许跨域
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    const { responseHeaders } = details;
+
+    if (responseHeaders) {
+      responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+      responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+      responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+      responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
+    }
+
+    callback({ responseHeaders });
+  });
+
   // 初始化应用程序路径
   console.log('Initializing application paths...');
   await initializePaths();

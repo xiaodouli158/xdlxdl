@@ -212,63 +212,37 @@ const HomePage = () => {
     };
   }, []);
 
-  // 页面加载时自动检测OBS和伴侣版本，但仅在应用启动后的第一次检测
+  // 页面加载时自动检测OBS和伴侣版本
   useEffect(() => {
     // 定义异步函数
     const fetchVersions = async () => {
       try {
-        // 检查是否已经在当前会话中获取过版本信息
-        // sessionStorage 在浏览器会话期间存在，浏览器关闭后清除
-        const versionChecked = sessionStorage.getItem('versionChecked');
-        const sessionObsVersion = sessionStorage.getItem('sessionObsVersion');
-        const sessionCompanionVersion = sessionStorage.getItem('sessionCompanionVersion');
-
-        // 如果当前会话已经检查过版本，直接使用会话中存储的版本
-        if (versionChecked === 'true' && sessionObsVersion && sessionCompanionVersion) {
-          console.log('使用会话中已获取的版本信息');
-          setObsVersion(sessionObsVersion);
-          setCompanionVersion(sessionCompanionVersion);
-          return;
-        }
-
-        // 首次启动应用，显示"检测中"状态
+        // 显示"检测中"状态
         setObsVersion('检测中');
         setCompanionVersion('检测中');
 
         // 检查 Electron 环境
         if (typeof window !== 'undefined' && window.electron) {
-          // 获取OBS版本 - 每次启动应用都实时获取
+          // 获取OBS版本 - 每次进入主页都重新检测
           const obsVer = await window.electron.getOBSVersion();
           setObsVersion(obsVer || '未检测到');
 
-          // 获取伴侣版本 - 每次启动应用都实时获取
+          // 获取伴侣版本 - 每次进入主页都重新检测
           const compVer = await window.electron.getCompanionVersion();
           setCompanionVersion(compVer || '未检测到');
 
-          // 将版本信息存储在会话存储中，以便在页面切换后使用
-          sessionStorage.setItem('versionChecked', 'true');
-          sessionStorage.setItem('sessionObsVersion', obsVer || '未检测到');
-          sessionStorage.setItem('sessionCompanionVersion', compVer || '未检测到');
+          console.log('版本检测完成 - OBS:', obsVer || '未检测到', ', 伴侣:', compVer || '未检测到');
         } else {
           // 如果不在 Electron 环境中，显示未检测到
           setObsVersion('未检测到');
           setCompanionVersion('未检测到');
-
-          // 同样记录到会话存储中
-          sessionStorage.setItem('versionChecked', 'true');
-          sessionStorage.setItem('sessionObsVersion', '未检测到');
-          sessionStorage.setItem('sessionCompanionVersion', '未检测到');
+          console.log('非Electron环境，版本显示为未检测到');
         }
       } catch (error) {
         // 发生错误时显示未检测到
         console.error('版本检测出错:', error);
         setObsVersion('未检测到');
         setCompanionVersion('未检测到');
-
-        // 记录错误状态到会话存储中
-        sessionStorage.setItem('versionChecked', 'true');
-        sessionStorage.setItem('sessionObsVersion', '未检测到');
-        sessionStorage.setItem('sessionCompanionVersion', '未检测到');
       }
     };
 
@@ -1474,19 +1448,14 @@ const HomePage = () => {
           </div>
 
           <div className="absolute bottom-3 right-3 z-10">
-            <select
-              className="w-auto bg-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none text-left pl-3 pr-8 border border-slate-600 relative"
-              value={selectedConfig}
-              onChange={(e) => setSelectedConfig(e.target.value)}
-              style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}
+            <button
+              className="w-auto bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg px-3 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600 transition-colors"
+              onClick={() => {
+                navigate('/app/danmu');
+              }}
             >
-              <option value="OBS备份">OBS备份</option>
-              <option value="配置1.json">配置1</option>
-              <option value="配置2.json">配置2</option>
-              {obsConfigs.map((config, index) => (
-                <option key={index} value={config}>{config}</option>
-              ))}
-            </select>
+              打开弹幕
+            </button>
           </div>
         </div>
 
