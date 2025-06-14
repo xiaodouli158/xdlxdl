@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { ArrowLeft, Settings, Play, Square, Wifi, WifiOff, Gift, Heart, Users, MessageCircle, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, Play, Square, Wifi, WifiOff, Gift, Heart, Users, MessageCircle, ThumbsUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DyCast, CastMethod } from '../core/danmu/dycast.ts';
 
@@ -10,15 +10,7 @@ const DanmuPage = () => {
   const [connectStatus, setConnectStatus] = useState(0);
   // 房间号
   const [roomNum, setRoomNum] = useState('');
-  // 转发地址
-  const [relayUrl, setRelayUrl] = useState('');
-  // 设置弹窗显示状态
-  const [showSettings, setShowSettings] = useState(false);
-  // 语音播报设置
-  const [voiceBroadcastEnabled, setVoiceBroadcastEnabled] = useState(() => {
-    const saved = localStorage.getItem('voiceBroadcastEnabled');
-    return saved ? JSON.parse(saved) : false;
-  });
+
 
   // 消息过滤器状态
   const [messageFilters, setMessageFilters] = useState(() => {
@@ -238,59 +230,11 @@ const DanmuPage = () => {
     setLikeCount('*****');
   }, []);
 
-  // 清空消息
-  const clearMessages = useCallback(() => {
-    setChatMessages([]);
-    setSocialMessages([]);
-    setGiftMessages([]);
-    setAllMessages([]);
-    setMessageStats({
-      totalMessages: 0,
-      chatCount: 0,
-      giftCount: 0,
-      followCount: 0,
-      likeActionCount: 0,
-      memberCount: 0
-    });
-  }, []);
 
-  // 保存弹幕到文件
-  const saveMessages = useCallback(() => {
-    const exportData = {
-      chatMessages,
-      socialMessages,
-      giftMessages,
-      allMessages, // 包含合并的消息数据
-      stats: messageStats,
-      roomInfo: {
-        roomNum,
-        title,
-        nickname,
-        followCount,
-        memberCount,
-        userCount,
-        likeCount
-      },
-      exportTime: new Date().toISOString()
-    };
 
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `弹幕数据_${roomNum}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, [chatMessages, socialMessages, giftMessages, allMessages, messageStats, roomNum, title, nickname, followCount, memberCount, userCount, likeCount]);
 
-  // 处理语音播报设置变化
-  const handleVoiceBroadcastChange = useCallback((enabled) => {
-    setVoiceBroadcastEnabled(enabled);
-    localStorage.setItem('voiceBroadcastEnabled', JSON.stringify(enabled));
-  }, []);
+
+
 
   // 处理消息过滤器变化
   const handleFilterChange = useCallback((filterType, enabled) => {
@@ -366,8 +310,7 @@ const DanmuPage = () => {
             <ArrowLeft size={20} className="mr-2" />
             返回主页
           </button>
-          <h1 className="text-xl font-bold">弹幕助手</h1>
-          <div className="ml-4 flex items-center space-x-4 text-sm">
+          <div className="flex items-center space-x-4 text-sm">
             {/* 聊天过滤器 */}
             <label className="flex items-center cursor-pointer text-blue-400 hover:text-blue-300 transition-colors">
               <input
@@ -412,7 +355,7 @@ const DanmuPage = () => {
                 onChange={(e) => handleFilterChange('like', e.target.checked)}
                 className="mr-2 w-4 h-4 text-yellow-600 bg-gray-700 border-gray-600 rounded focus:ring-yellow-500"
               />
-              <Heart size={16} className="mr-1" />
+              <ThumbsUp size={16} className="mr-1" />
               点赞: {messageStats.likeActionCount}
             </label>
 
@@ -428,31 +371,6 @@ const DanmuPage = () => {
               进入: {messageStats.memberCount}
             </label>
           </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={saveMessages}
-            disabled={messageStats.totalMessages === 0}
-            className="p-2 text-gray-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="保存弹幕数据"
-          >
-            <Download size={20} />
-          </button>
-          <button
-            onClick={clearMessages}
-            disabled={messageStats.totalMessages === 0}
-            className="p-2 text-gray-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="清空弹幕"
-          >
-            <Trash2 size={20} />
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="p-2 text-gray-300 hover:text-white transition-colors"
-            title="设置"
-          >
-            <Settings size={20} />
-          </button>
         </div>
       </div>
 
@@ -619,9 +537,13 @@ const DanmuPage = () => {
                     <div className="w-4 h-4 flex-shrink-0">
                       {msg.type === 'member' && <Users size={14} className="text-blue-400" />}
                       {msg.type === 'follow' && <Heart size={14} className="text-red-400" />}
-                      {msg.type === 'like' && <Heart size={14} className="text-pink-400" />}
+                      {msg.type === 'like' && <ThumbsUp size={14} className="text-yellow-400" />}
                     </div>
-                    <span className="text-green-400 font-medium">{msg.user.name}</span>
+                    <span className={`font-medium ${
+                      msg.type === 'member' ? 'text-blue-400' :
+                      msg.type === 'follow' ? 'text-red-400' :
+                      msg.type === 'like' ? 'text-yellow-400' : 'text-green-400'
+                    }`}>{msg.user.name}</span>
                   </div>
                   <div className="text-gray-300 mt-1">{msg.content}</div>
                   <div className="text-gray-500 text-xs mt-1">
@@ -639,67 +561,7 @@ const DanmuPage = () => {
         </div>
       </div>
 
-      {/* 设置弹窗 */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 w-96">
-            <h3 className="text-lg font-medium mb-4">弹幕设置</h3>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">语音播报</label>
-                <input
-                  type="checkbox"
-                  checked={voiceBroadcastEnabled}
-                  onChange={(e) => handleVoiceBroadcastChange(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="border-t border-gray-600 pt-4">
-                <h4 className="text-sm font-medium mb-2">转发设置</h4>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">WebSocket 转发地址</label>
-                  <input
-                    type="text"
-                    value={relayUrl}
-                    onChange={(e) => setRelayUrl(e.target.value)}
-                    placeholder="ws://localhost:8765"
-                    className="w-full bg-slate-700 text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    可选：设置后将实时转发弹幕数据到指定的 WebSocket 服务器
-                  </p>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-600 pt-4">
-                <h4 className="text-sm font-medium mb-2">关于</h4>
-                <div className="text-sm text-gray-400 space-y-1">
-                  <p>弹幕助手 v1.0.0</p>
-                  <p>基于 DyCast 项目集成</p>
-                  <p>支持抖音直播弹幕获取与转发</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-2 mt-6">
-              <button
-                onClick={() => setShowSettings(false)}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors"
-              >
-                确定
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
